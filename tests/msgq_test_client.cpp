@@ -72,19 +72,17 @@ protected:
     }
 
     virtual void SetUp() {
-        static constexpr size_t kNumElementsInQueue = 1024;
         mService = waitGetTestService();
         ASSERT_NE(mService, nullptr);
         ASSERT_TRUE(mService->isRemote());
-        // create a queue on the client side
-        mQueue = new (std::nothrow)
-            MessageQueueSync(kNumElementsInQueue, true /* configure event flag word */);
+        mService->configureFmqSyncReadWrite([this](
+                bool ret, const MQDescriptorSync<uint16_t>& in) {
+            ASSERT_TRUE(ret);
+            mQueue = new (std::nothrow) MessageQueueSync(in);
+        });
         ASSERT_NE(nullptr, mQueue);
         ASSERT_TRUE(mQueue->isValid());
         mNumMessagesMax = mQueue->getQuantumCount();
-
-        // tell server to set up the queue on its end
-        ASSERT_TRUE(mService->configureFmqSyncReadWrite(*mQueue->getDesc()));
     }
 
     sp<ITestMsgQ> mService;
@@ -246,11 +244,6 @@ TEST_F(SynchronizedReadWriteClient, BlockingReadWrite1) {
                                      static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
                                      5000000000 /* timeOutNanos */);
     ASSERT_TRUE(ret);
-    ret = mQueue->writeBlocking(data, mNumMessagesMax,
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-                                5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
 }
 
 /*
@@ -293,7 +286,6 @@ TEST_F(SynchronizedReadWriteClient, BlockingReadWrite2) {
 TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat1) {
     const size_t dataLen = 64;
     uint16_t data[dataLen] = {0};
-    bool ret = false;
 
     /*
      * Request service to perform a blocking read. This call is oneway and will
@@ -303,19 +295,14 @@ TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat1) {
     mService->requestBlockingReadRepeat(dataLen, writeCount);
 
     for (size_t i = 0; i < writeCount; i++) {
-        ret = mQueue->writeBlocking(data, dataLen,
-                                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-                                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-                                    5000000000 /* timeOutNanos */);
+        bool ret = mQueue->writeBlocking(
+                data,
+                dataLen,
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                5000000000 /* timeOutNanos */);
         ASSERT_TRUE(ret);
     }
-
-    ret = mQueue->writeBlocking(data, mNumMessagesMax,
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-                                5000000000 /* timeOutNanos */);
-
-    ASSERT_TRUE(ret);
 }
 
 /*
@@ -327,7 +314,6 @@ TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat1) {
 TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat2) {
     const size_t dataLen = 64;
     uint16_t data[dataLen] = {0};
-    bool ret = false;
 
     /*
      * Request service to perform a blocking read. This call is oneway and will
@@ -337,18 +323,14 @@ TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat2) {
     mService->requestBlockingReadRepeat(dataLen*2, writeCount/2);
 
     for (size_t i = 0; i < writeCount; i++) {
-        ret = mQueue->writeBlocking(data, dataLen,
-                                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-                                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-                                    5000000000 /* timeOutNanos */);
+        bool ret = mQueue->writeBlocking(
+                data,
+                dataLen,
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                5000000000 /* timeOutNanos */);
         ASSERT_TRUE(ret);
     }
-
-    ret = mQueue->writeBlocking(data, mNumMessagesMax,
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-                                5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
 }
 
 /*
@@ -359,7 +341,6 @@ TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat2) {
 TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat3) {
     const size_t dataLen = 64;
     uint16_t data[dataLen] = {0};
-    bool ret = false;
 
     /*
      * Request service to perform a blocking read. This call is oneway and will
@@ -369,17 +350,14 @@ TEST_F(SynchronizedReadWriteClient, BlockingReadWriteRepeat3) {
     mService->requestBlockingReadRepeat(dataLen/2, writeCount*2);
 
     for (size_t i = 0; i < writeCount; i++) {
-        ret = mQueue->writeBlocking(data, dataLen,
-                                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-                                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-                                    5000000000 /* timeOutNanos */);
+        bool ret = mQueue->writeBlocking(
+                data,
+                dataLen,
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                5000000000 /* timeOutNanos */);
         ASSERT_TRUE(ret);
     }
-    ret = mQueue->writeBlocking(data, mNumMessagesMax,
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-                                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-                                5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
 }
 
 /*

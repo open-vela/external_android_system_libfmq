@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-subdirs = [
-    "tests",
-]
-
-cc_library {
+cc_library_shared {
     name: "libfmq",
     shared_libs: [
         "libbase",
@@ -30,6 +26,7 @@ cc_library {
     ],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
+    clang: true,
     srcs: [
         "EventFlag.cpp",
         "FmqInternal.cpp",
@@ -39,7 +36,4 @@ cc_library {
         "-Werror",
     ],
     vendor_available: true,
-    vndk: {
-        enabled: true,
-    },
 }
