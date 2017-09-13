@@ -26,7 +26,6 @@ cc_library_shared {
     ],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
-    clang: true,
     srcs: [
         "EventFlag.cpp",
         "FmqInternal.cpp",
