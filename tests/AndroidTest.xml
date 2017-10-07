@@ -35,5 +35,6 @@
         <option name="binary-test-envp" value="VTS_ROOT_PATH=/data/local/tmp" />
         <option name="binary-test-args" value="-x /data/local/tmp/system/lib" />
         <option name="binary-test-args" value="-y /data/local/tmp/system/lib64" />
+        <option name="test-timeout" value="1m"/>
     </test>
 </configuration>
