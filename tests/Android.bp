@@ -1,3 +1,4 @@
+//
 // Copyright (C) 2016 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,35 +12,54 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
 
-subdirs = [
-    "tests",
-]
+cc_test {
+    name: "mq_test_client",
+    srcs: ["msgq_test_client.cpp"],
 
-cc_library_shared {
-    name: "libfmq",
-    shared_libs: [
-        "libbase",
-        "liblog",
-        "libcutils",
-        "libutils",
-    ],
-    export_shared_lib_headers: [
-        "libcutils",
-        "libutils",
-    ],
-    export_include_dirs: ["include"],
-    local_include_dirs: ["include"],
-    srcs: [
-        "EventFlag.cpp",
-        "FmqInternal.cpp",
-    ],
     cflags: [
         "-Wall",
         "-Werror",
     ],
-    vendor_available: true,
-    vndk: {
-        enabled: true,
-    },
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libfmq",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "liblog",
+        "libutils",
+    ],
+
+    // Allow dlsym'ing self for statically linked passthrough implementations
+    ldflags: ["-rdynamic"],
+
+    // These are static libs only for testing purposes and portability. Shared
+    // libs should be used on device.
+    static_libs: ["android.hardware.tests.msgq@1.0"],
+    whole_static_libs: ["android.hardware.tests.msgq@1.0-impl"],
+}
+
+cc_test {
+    name: "mq_test",
+
+    srcs: ["mq_test.cpp"],
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libfmq",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "liblog",
+        "libutils",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
 }
