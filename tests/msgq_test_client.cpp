@@ -890,3 +890,9 @@ TEST_F(UnsynchronizedWriteClient, OverflowNotificationTest) {
         ASSERT_FALSE(mQueue->read(&readData[0], mNumMessagesMax));
     }
 }
+
+int main(int argc, char** argv) {
+    setenv("TREBLE_TESTING_OVERRIDE", "true", true);
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
