@@ -23,7 +23,7 @@
         <option name="push" value="DATA/nativetest64/mq_test_client/mq_test_client->/data/nativetest64/mq_test_client/mq_test_client" />
         <option name="push" value="DATA/nativetest64/hidl_test_helper->/data/nativetest64/hidl_test_helper" />
     </target_preparer>
-    <target_preparer class="com.android.tradefed.targetprep.VtsPythonVirtualenvPreparer" />
+    <multi_target_preparer class="com.android.tradefed.targetprep.VtsPythonVirtualenvPreparer" />
     <test class="com.android.tradefed.testtype.VtsMultiDeviceTest">
         <option name="test-module-name" value="VtsFmqUnitTests" />
         <option name="binary-test-type" value="binary_test" />
