@@ -22,9 +22,11 @@ LOCAL_SRC_FILES := fmq_test
 LOCAL_REQUIRED_MODULES :=                           \
     mq_test_client                                  \
     android.hardware.tests.msgq@1.0-service-test    \
-    mq_test_client_32                               \
-    android.hardware.tests.msgq@1.0-service-test_32 \
     hidl_test_helper
+
+LOCAL_REQUIRED_MODULES_arm64 := android.hardware.tests.msgq@1.0-service-test_32 mq_test_client_32
+LOCAL_REQUIRED_MODULES_mips64 := android.hardware.tests.msgq@1.0-service-test_32 mq_test_client_32
+LOCAL_REQUIRED_MODULES_x86_64 := android.hardware.tests.msgq@1.0-service-test_32 mq_test_client_32
 
 include $(BUILD_PREBUILT)
 
