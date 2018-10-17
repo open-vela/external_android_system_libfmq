@@ -16,7 +16,7 @@ subdirs = [
     "tests",
 ]
 
-cc_library_shared {
+cc_library {
     name: "libfmq",
     shared_libs: [
         "libbase",
