@@ -24,6 +24,11 @@ cc_library {
         "libcutils",
         "libutils",
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.neuralnetworks",
+        "test_com.android.neuralnetworks",
+    ],
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
     srcs: [
