@@ -44,4 +44,5 @@ cc_library {
         enabled: true,
     },
     double_loadable: true,
+    min_sdk_version: "29",
 }
