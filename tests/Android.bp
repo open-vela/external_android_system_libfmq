@@ -59,7 +59,3 @@ cc_test {
         "-Werror",
     ],
 }
-
-vts_config {
-    name: "VtsFmqUnitTests",
-}
