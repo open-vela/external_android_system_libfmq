@@ -32,8 +32,3 @@ LOCAL_REQUIRED_MODULES += mq_test_client$(TARGET_2ND_ARCH_MODULE_SUFFIX)
 endif
 
 include $(BUILD_PREBUILT)
-
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := VtsFmqUnitTests
--include test/vts/tools/build/Android.host_config.mk
