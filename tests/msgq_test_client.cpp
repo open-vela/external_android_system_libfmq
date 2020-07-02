@@ -44,7 +44,6 @@ typedef MessageQueue<uint16_t, kSynchronizedReadWrite> MessageQueueSync;
 typedef MessageQueue<uint16_t, kUnsynchronizedWrite> MessageQueueUnsync;
 
 static sp<ITestMsgQ> waitGetTestService() {
-    android::hardware::details::setTrebleTestingOverride(true);
     // waitForHwService is required because ITestMsgQ is not in manifest.xml.
     // "Real" HALs shouldn't be doing this.
     waitForHwService(ITestMsgQ::descriptor, "default");
