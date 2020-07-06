@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef HIDL_MQ_H
-#define HIDL_MQ_H
+#pragma once
 
 #include <cutils/ashmem.h>
 #include <fmq/EventFlag.h>
-#include <hidl/MQDescriptor.h>
 #include <sys/mman.h>
 #include <utils/Log.h>
 #include <utils/SystemClock.h>
@@ -27,25 +25,27 @@
 #include <new>
 
 namespace android {
-namespace hardware {
 
+namespace hardware {
 namespace details {
 void check(bool exp);
 void logError(const std::string& message);
 }  // namespace details
+}  // namespace hardware
 
-template <typename T, MQFlavor flavor>
-struct MessageQueue {
-    typedef MQDescriptor<T, flavor> Descriptor;
+template <template <typename, hardware::MQFlavor> class MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+struct MessageQueueBase {
+    typedef MQDescriptorType<T, flavor> Descriptor;
 
     /**
      * @param Desc MQDescriptor describing the FMQ.
      * @param resetPointers bool indicating whether the read/write pointers
      * should be reset or not.
      */
-    MessageQueue(const Descriptor& Desc, bool resetPointers = true);
+    MessageQueueBase(const Descriptor& Desc, bool resetPointers = true);
 
-    ~MessageQueue();
+    ~MessageQueueBase();
 
     /**
      * This constructor uses Ashmem shared memory to create an FMQ
@@ -55,7 +55,8 @@ struct MessageQueue {
      * @param configureEventFlagWord Boolean that specifies if memory should
      * also be allocated and mapped for an EventFlag word.
      */
-    MessageQueue(size_t numElementsInQueue, bool configureEventFlagWord = false);
+
+    MessageQueueBase(size_t numElementsInQueue, bool configureEventFlagWord = false);
 
     /**
      * @return Number of items of type T that can be written into the FMQ
@@ -137,7 +138,7 @@ struct MessageQueue {
      * EventFlag bit mask 'readNotification' is is waited upon.
      *
      * This method should only be used with a MessageQueue of the flavor
-     * 'kSynchronizedReadWrite'.
+     * 'hardware::kSynchronizedReadWrite'.
      *
      * Upon a successful write, wake is called on 'writeNotification' (if
      * non-zero).
@@ -189,7 +190,7 @@ struct MessageQueue {
      * -If 'count' is greater than the FMQ size.
      *
      * This method should only be used with a MessageQueue of the flavor
-     * 'kSynchronizedReadWrite'.
+     * 'hardware::kSynchronizedReadWrite'.
 
      * If FMQ does not contain 'count' items, the eventFlag bit mask
      * 'writeNotification' is waited upon. Upon a successful read from the FMQ,
@@ -415,9 +416,8 @@ struct MessageQueue {
     size_t availableToWriteBytes() const;
     size_t availableToReadBytes() const;
 
-    MessageQueue(const MessageQueue& other) = delete;
-    MessageQueue& operator=(const MessageQueue& other) = delete;
-    MessageQueue();
+    MessageQueueBase(const MessageQueueBase& other) = delete;
+    MessageQueueBase& operator=(const MessageQueueBase& other) = delete;
 
     void* mapGrantorDescr(uint32_t grantorIdx);
     void unmapGrantorDescr(void* address, uint32_t grantorIdx);
@@ -431,7 +431,6 @@ struct MessageQueue {
         FMQ_NOT_FULL = 0x01,
         FMQ_NOT_EMPTY = 0x02
     };
-
     std::unique_ptr<Descriptor> mDesc;
     uint8_t* mRing = nullptr;
     /*
@@ -449,8 +448,9 @@ struct MessageQueue {
     android::hardware::EventFlag* mEventFlag = nullptr;
 };
 
-template <typename T, MQFlavor flavor>
-T* MessageQueue<T, flavor>::MemTransaction::getSlot(size_t idx) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+T* MessageQueueBase<MQDescriptorType, T, flavor>::MemTransaction::getSlot(size_t idx) {
     size_t firstRegionLength = first.getLength();
     size_t secondRegionLength = second.getLength();
 
@@ -465,12 +465,11 @@ T* MessageQueue<T, flavor>::MemTransaction::getSlot(size_t idx) {
     return second.getAddress() + idx - firstRegionLength;
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::MemTransaction::getMemRegionInfo(size_t startIdx, size_t nMessages,
-                                                               size_t& firstCount,
-                                                               size_t& secondCount,
-                                                               T** firstBaseAddress,
-                                                               T** secondBaseAddress) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::MemTransaction::getMemRegionInfo(
+        size_t startIdx, size_t nMessages, size_t& firstCount, size_t& secondCount,
+        T** firstBaseAddress, T** secondBaseAddress) {
     size_t firstRegionLength = first.getLength();
     size_t secondRegionLength = second.getLength();
 
@@ -501,8 +500,11 @@ bool MessageQueue<T, flavor>::MemTransaction::getMemRegionInfo(size_t startIdx, 
     return true;
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::MemTransaction::copyFrom(T* data, size_t startIdx, size_t nMessages) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::MemTransaction::copyFrom(T* data,
+                                                                             size_t startIdx,
+                                                                             size_t nMessages) {
     if (data == nullptr) {
         return false;
     }
@@ -530,9 +532,11 @@ bool MessageQueue<T, flavor>::MemTransaction::copyFrom(T* data, size_t startIdx,
     return true;
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::MemTransaction::copyTo(const T* data, size_t startIdx,
-                                                     size_t nMessages) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::MemTransaction::copyTo(const T* data,
+                                                                           size_t startIdx,
+                                                                           size_t nMessages) {
     if (data == nullptr) {
         return false;
     }
@@ -560,10 +564,11 @@ bool MessageQueue<T, flavor>::MemTransaction::copyTo(const T* data, size_t start
     return true;
 }
 
-template <typename T, MQFlavor flavor>
-void MessageQueue<T, flavor>::initMemory(bool resetPointers) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+void MessageQueueBase<MQDescriptorType, T, flavor>::initMemory(bool resetPointers) {
     /*
-     * Verify that the the Descriptor contains the minimum number of grantors
+     * Verify that the Descriptor contains the minimum number of grantors
      * the native_handle is valid and T matches quantum size.
      */
     if ((mDesc == nullptr) || !mDesc->isHandleValid() ||
@@ -572,7 +577,7 @@ void MessageQueue<T, flavor>::initMemory(bool resetPointers) {
         return;
     }
 
-    if (flavor == kSynchronizedReadWrite) {
+    if (flavor == hardware::kSynchronizedReadWrite) {
         mReadPtr =
                 reinterpret_cast<std::atomic<uint64_t>*>(mapGrantorDescr(Descriptor::READPTRPOS));
     } else {
@@ -583,21 +588,21 @@ void MessageQueue<T, flavor>::initMemory(bool resetPointers) {
         mReadPtr = new (std::nothrow) std::atomic<uint64_t>;
     }
 
-    details::check(mReadPtr != nullptr);
+    hardware::details::check(mReadPtr != nullptr);
 
     mWritePtr = reinterpret_cast<std::atomic<uint64_t>*>(mapGrantorDescr(Descriptor::WRITEPTRPOS));
-    details::check(mWritePtr != nullptr);
+    hardware::details::check(mWritePtr != nullptr);
 
     if (resetPointers) {
         mReadPtr->store(0, std::memory_order_release);
         mWritePtr->store(0, std::memory_order_release);
-    } else if (flavor != kSynchronizedReadWrite) {
+    } else if (flavor != hardware::kSynchronizedReadWrite) {
         // Always reset the read pointer.
         mReadPtr->store(0, std::memory_order_release);
     }
 
     mRing = reinterpret_cast<uint8_t*>(mapGrantorDescr(Descriptor::DATAPTRPOS));
-    details::check(mRing != nullptr);
+    hardware::details::check(mRing != nullptr);
 
     mEvFlagWord = static_cast<std::atomic<uint32_t>*>(mapGrantorDescr(Descriptor::EVFLAGWORDPOS));
     if (mEvFlagWord != nullptr) {
@@ -605,8 +610,10 @@ void MessageQueue<T, flavor>::initMemory(bool resetPointers) {
     }
 }
 
-template <typename T, MQFlavor flavor>
-MessageQueue<T, flavor>::MessageQueue(const Descriptor& Desc, bool resetPointers) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(const Descriptor& Desc,
+                                                                bool resetPointers) {
     mDesc = std::unique_ptr<Descriptor>(new (std::nothrow) Descriptor(Desc));
     if (mDesc == nullptr) {
         return;
@@ -615,8 +622,10 @@ MessageQueue<T, flavor>::MessageQueue(const Descriptor& Desc, bool resetPointers
     initMemory(resetPointers);
 }
 
-template <typename T, MQFlavor flavor>
-MessageQueue<T, flavor>::MessageQueue(size_t numElementsInQueue, bool configureEventFlagWord) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(size_t numElementsInQueue,
+                                                                bool configureEventFlagWord) {
     // Check if the buffer size would not overflow size_t
     if (numElementsInQueue > SIZE_MAX / sizeof(T)) {
         return;
@@ -666,9 +675,10 @@ MessageQueue<T, flavor>::MessageQueue(size_t numElementsInQueue, bool configureE
     initMemory(true);
 }
 
-template <typename T, MQFlavor flavor>
-MessageQueue<T, flavor>::~MessageQueue() {
-    if (flavor == kUnsynchronizedWrite) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+MessageQueueBase<MQDescriptorType, T, flavor>::~MessageQueueBase() {
+    if (flavor == hardware::kUnsynchronizedWrite) {
         delete mReadPtr;
     } else {
         unmapGrantorDescr(mReadPtr, Descriptor::READPTRPOS);
@@ -685,34 +695,38 @@ MessageQueue<T, flavor>::~MessageQueue() {
     }
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::write(const T* data) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::write(const T* data) {
     return write(data, 1);
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::read(T* data) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::read(T* data) {
     return read(data, 1);
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::write(const T* data, size_t nMessages) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::write(const T* data, size_t nMessages) {
     MemTransaction tx;
     return beginWrite(nMessages, &tx) && tx.copyTo(data, 0 /* startIdx */, nMessages) &&
            commitWrite(nMessages);
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::writeBlocking(const T* data, size_t count, uint32_t readNotification,
-                                            uint32_t writeNotification, int64_t timeOutNanos,
-                                            android::hardware::EventFlag* evFlag) {
-    static_assert(flavor == kSynchronizedReadWrite,
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::writeBlocking(
+        const T* data, size_t count, uint32_t readNotification, uint32_t writeNotification,
+        int64_t timeOutNanos, android::hardware::EventFlag* evFlag) {
+    static_assert(flavor == hardware::kSynchronizedReadWrite,
                   "writeBlocking can only be used with the "
-                  "kSynchronizedReadWrite flavor.");
+                  "hardware::kSynchronizedReadWrite flavor.");
     /*
      * If evFlag is null and the FMQ does not have its own EventFlag object
      * return false;
-     * If the flavor is kSynchronizedReadWrite and the readNotification
+     * If the flavor is hardware::kSynchronizedReadWrite and the readNotification
      * bit mask is zero return false;
      * If the count is greater than queue size, return false
      * to prevent blocking until timeOut.
@@ -720,7 +734,7 @@ bool MessageQueue<T, flavor>::writeBlocking(const T* data, size_t count, uint32_
     if (evFlag == nullptr) {
         evFlag = mEventFlag;
         if (evFlag == nullptr) {
-            details::logError(
+            hardware::details::logError(
                     "writeBlocking failed: called on MessageQueue with no Eventflag"
                     "configured or provided");
             return false;
@@ -786,8 +800,8 @@ bool MessageQueue<T, flavor>::writeBlocking(const T* data, size_t count, uint32_
                                        true /* retry on spurious wake */);
 
         if (status != android::TIMED_OUT && status != android::NO_ERROR) {
-            details::logError("Unexpected error code from EventFlag Wait status " +
-                              std::to_string(status));
+            hardware::details::logError("Unexpected error code from EventFlag Wait status " +
+                                        std::to_string(status));
             break;
         }
 
@@ -812,18 +826,21 @@ bool MessageQueue<T, flavor>::writeBlocking(const T* data, size_t count, uint32_
     return result;
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::writeBlocking(const T* data, size_t count, int64_t timeOutNanos) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::writeBlocking(const T* data, size_t count,
+                                                                  int64_t timeOutNanos) {
     return writeBlocking(data, count, FMQ_NOT_FULL, FMQ_NOT_EMPTY, timeOutNanos);
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::readBlocking(T* data, size_t count, uint32_t readNotification,
-                                           uint32_t writeNotification, int64_t timeOutNanos,
-                                           android::hardware::EventFlag* evFlag) {
-    static_assert(flavor == kSynchronizedReadWrite,
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::readBlocking(
+        T* data, size_t count, uint32_t readNotification, uint32_t writeNotification,
+        int64_t timeOutNanos, android::hardware::EventFlag* evFlag) {
+    static_assert(flavor == hardware::kSynchronizedReadWrite,
                   "readBlocking can only be used with the "
-                  "kSynchronizedReadWrite flavor.");
+                  "hardware::kSynchronizedReadWrite flavor.");
 
     /*
      * If evFlag is null and the FMQ does not own its own EventFlag object
@@ -835,7 +852,7 @@ bool MessageQueue<T, flavor>::readBlocking(T* data, size_t count, uint32_t readN
     if (evFlag == nullptr) {
         evFlag = mEventFlag;
         if (evFlag == nullptr) {
-            details::logError(
+            hardware::details::logError(
                     "readBlocking failed: called on MessageQueue with no Eventflag"
                     "configured or provided");
             return false;
@@ -902,8 +919,8 @@ bool MessageQueue<T, flavor>::readBlocking(T* data, size_t count, uint32_t readN
                                        true /* retry on spurious wake */);
 
         if (status != android::TIMED_OUT && status != android::NO_ERROR) {
-            details::logError("Unexpected error code from EventFlag Wait status " +
-                              std::to_string(status));
+            hardware::details::logError("Unexpected error code from EventFlag Wait status " +
+                                        std::to_string(status));
             break;
         }
 
@@ -927,34 +944,41 @@ bool MessageQueue<T, flavor>::readBlocking(T* data, size_t count, uint32_t readN
     return result;
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::readBlocking(T* data, size_t count, int64_t timeOutNanos) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::readBlocking(T* data, size_t count,
+                                                                 int64_t timeOutNanos) {
     return readBlocking(data, count, FMQ_NOT_FULL, FMQ_NOT_EMPTY, timeOutNanos);
 }
 
-template <typename T, MQFlavor flavor>
-size_t MessageQueue<T, flavor>::availableToWriteBytes() const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+size_t MessageQueueBase<MQDescriptorType, T, flavor>::availableToWriteBytes() const {
     return mDesc->getSize() - availableToReadBytes();
 }
 
-template <typename T, MQFlavor flavor>
-size_t MessageQueue<T, flavor>::availableToWrite() const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+size_t MessageQueueBase<MQDescriptorType, T, flavor>::availableToWrite() const {
     return availableToWriteBytes() / sizeof(T);
 }
 
-template <typename T, MQFlavor flavor>
-size_t MessageQueue<T, flavor>::availableToRead() const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+size_t MessageQueueBase<MQDescriptorType, T, flavor>::availableToRead() const {
     return availableToReadBytes() / sizeof(T);
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::beginWrite(size_t nMessages, MemTransaction* result) const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::beginWrite(size_t nMessages,
+                                                               MemTransaction* result) const {
     /*
      * If nMessages is greater than size of FMQ or in case of the synchronized
      * FMQ flavor, if there is not enough space to write nMessages, then return
      * result with null addresses.
      */
-    if ((flavor == kSynchronizedReadWrite && (availableToWrite() < nMessages)) ||
+    if ((flavor == hardware::kSynchronizedReadWrite && (availableToWrite() < nMessages)) ||
         nMessages > getQuantumCount()) {
         *result = MemTransaction();
         return false;
@@ -989,13 +1013,14 @@ bool MessageQueue<T, flavor>::beginWrite(size_t nMessages, MemTransaction* resul
     return true;
 }
 
-template <typename T, MQFlavor flavor>
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
 /*
  * Disable integer sanitization since integer overflow here is allowed
  * and legal.
  */
-__attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::commitWrite(
-        size_t nMessages) {
+__attribute__((no_sanitize("integer"))) bool
+MessageQueueBase<MQDescriptorType, T, flavor>::commitWrite(size_t nMessages) {
     size_t nBytesWritten = nMessages * sizeof(T);
     auto writePtr = mWritePtr->load(std::memory_order_relaxed);
     writePtr += nBytesWritten;
@@ -1007,30 +1032,34 @@ __attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::commitWrit
     return true;
 }
 
-template <typename T, MQFlavor flavor>
-size_t MessageQueue<T, flavor>::availableToReadBytes() const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+size_t MessageQueueBase<MQDescriptorType, T, flavor>::availableToReadBytes() const {
     /*
      * This method is invoked by implementations of both read() and write() and
-     * hence requries a memory_order_acquired load for both mReadPtr and
+     * hence requires a memory_order_acquired load for both mReadPtr and
      * mWritePtr.
      */
     return mWritePtr->load(std::memory_order_acquire) - mReadPtr->load(std::memory_order_acquire);
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::read(T* data, size_t nMessages) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::read(T* data, size_t nMessages) {
     MemTransaction tx;
     return beginRead(nMessages, &tx) && tx.copyFrom(data, 0 /* startIdx */, nMessages) &&
            commitRead(nMessages);
 }
 
-template <typename T, MQFlavor flavor>
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
 /*
  * Disable integer sanitization since integer overflow here is allowed
  * and legal.
  */
-__attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::beginRead(
-        size_t nMessages, MemTransaction* result) const {
+__attribute__((no_sanitize("integer"))) bool
+MessageQueueBase<MQDescriptorType, T, flavor>::beginRead(size_t nMessages,
+                                                         MemTransaction* result) const {
     *result = MemTransaction();
     /*
      * If it is detected that the data in the queue was overwritten
@@ -1086,18 +1115,20 @@ __attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::beginRead(
     return true;
 }
 
-template <typename T, MQFlavor flavor>
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
 /*
  * Disable integer sanitization since integer overflow here is allowed
  * and legal.
  */
-__attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::commitRead(size_t nMessages) {
+__attribute__((no_sanitize("integer"))) bool
+MessageQueueBase<MQDescriptorType, T, flavor>::commitRead(size_t nMessages) {
     // TODO: Use a local copy of readPtr to avoid relazed mReadPtr loads.
     auto readPtr = mReadPtr->load(std::memory_order_relaxed);
     auto writePtr = mWritePtr->load(std::memory_order_acquire);
     /*
      * If the flavor is unsynchronized, it is possible that a write overflow may
-     * have occured between beginRead() and commitRead().
+     * have occurred between beginRead() and commitRead().
      */
     if (writePtr - readPtr > mDesc->getSize()) {
         mReadPtr->store(writePtr, std::memory_order_release);
@@ -1110,33 +1141,37 @@ __attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::commitRead
     return true;
 }
 
-template <typename T, MQFlavor flavor>
-size_t MessageQueue<T, flavor>::getQuantumSize() const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+size_t MessageQueueBase<MQDescriptorType, T, flavor>::getQuantumSize() const {
     return mDesc->getQuantum();
 }
 
-template <typename T, MQFlavor flavor>
-size_t MessageQueue<T, flavor>::getQuantumCount() const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+size_t MessageQueueBase<MQDescriptorType, T, flavor>::getQuantumCount() const {
     return mDesc->getSize() / mDesc->getQuantum();
 }
 
-template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::isValid() const {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+bool MessageQueueBase<MQDescriptorType, T, flavor>::isValid() const {
     return mRing != nullptr && mReadPtr != nullptr && mWritePtr != nullptr;
 }
 
-template <typename T, MQFlavor flavor>
-void* MessageQueue<T, flavor>::mapGrantorDescr(uint32_t grantorIdx) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+void* MessageQueueBase<MQDescriptorType, T, flavor>::mapGrantorDescr(uint32_t grantorIdx) {
     const native_handle_t* handle = mDesc->handle();
     auto grantors = mDesc->grantors();
     if (handle == nullptr) {
-        details::logError("mDesc->handle is null");
+        hardware::details::logError("mDesc->handle is null");
         return nullptr;
     }
 
     if (grantorIdx >= grantors.size()) {
-        details::logError(std::string("grantorIdx must be less than ") +
-                          std::to_string(grantors.size()));
+        hardware::details::logError(std::string("grantorIdx must be less than ") +
+                                    std::to_string(grantors.size()));
         return nullptr;
     }
 
@@ -1150,14 +1185,16 @@ void* MessageQueue<T, flavor>::mapGrantorDescr(uint32_t grantorIdx) {
     void* address = mmap(0, mapLength, PROT_READ | PROT_WRITE, MAP_SHARED, handle->data[fdIndex],
                          mapOffset);
     if (address == MAP_FAILED) {
-        details::logError(std::string("mmap failed: ") + std::to_string(errno));
+        hardware::details::logError(std::string("mmap failed: ") + std::to_string(errno));
         return nullptr;
     }
     return reinterpret_cast<uint8_t*>(address) + (grantors[grantorIdx].offset - mapOffset);
 }
 
-template <typename T, MQFlavor flavor>
-void MessageQueue<T, flavor>::unmapGrantorDescr(void* address, uint32_t grantorIdx) {
+template <template <typename, hardware::MQFlavor> typename MQDescriptorType, typename T,
+          hardware::MQFlavor flavor>
+void MessageQueueBase<MQDescriptorType, T, flavor>::unmapGrantorDescr(void* address,
+                                                                      uint32_t grantorIdx) {
     auto grantors = mDesc->grantors();
     if ((address == nullptr) || (grantorIdx >= grantors.size())) {
         return;
@@ -1171,5 +1208,3 @@ void MessageQueue<T, flavor>::unmapGrantorDescr(void* address, uint32_t grantorI
 }
 
 }  // namespace hardware
-}  // namespace android
-#endif  // HIDL_MQ_H
