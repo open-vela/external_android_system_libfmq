@@ -17,21 +17,21 @@
 #ifndef HIDL_MQ_H
 #define HIDL_MQ_H
 
-#include <atomic>
 #include <cutils/ashmem.h>
 #include <fmq/EventFlag.h>
 #include <hidl/MQDescriptor.h>
-#include <new>
 #include <sys/mman.h>
 #include <utils/Log.h>
 #include <utils/SystemClock.h>
+#include <atomic>
+#include <new>
 
 namespace android {
 namespace hardware {
 
 namespace details {
 void check(bool exp);
-void logError(const std::string &message);
+void logError(const std::string& message);
 }  // namespace details
 
 template <typename T, MQFlavor flavor>
@@ -207,9 +207,8 @@ struct MessageQueue {
      *
      * @return Whether the read was successful.
      */
-    bool readBlocking(T* data, size_t count, uint32_t readNotification,
-                      uint32_t writeNotification, int64_t timeOutNanos = 0,
-                      android::hardware::EventFlag* evFlag = nullptr);
+    bool readBlocking(T* data, size_t count, uint32_t readNotification, uint32_t writeNotification,
+                      int64_t timeOutNanos = 0, android::hardware::EventFlag* evFlag = nullptr);
 
     bool readBlocking(T* data, size_t count, int64_t timeOutNanos = 0);
 
@@ -237,7 +236,7 @@ struct MessageQueue {
 
         MemRegion(T* base, size_t size) : address(base), length(size) {}
 
-        MemRegion& operator=(const MemRegion &other) {
+        MemRegion& operator=(const MemRegion& other) {
             address = other.address;
             length = other.length;
             return *this;
@@ -259,7 +258,7 @@ struct MessageQueue {
          */
         inline size_t getLengthInBytes() const { return length * sizeof(T); }
 
-    private:
+      private:
         /* Base address */
         T* address;
 
@@ -279,10 +278,10 @@ struct MessageQueue {
     struct MemTransaction {
         MemTransaction() : MemTransaction(MemRegion(), MemRegion()) {}
 
-        MemTransaction(const MemRegion& regionFirst, const MemRegion& regionSecond) :
-            first(regionFirst), second(regionSecond) {}
+        MemTransaction(const MemRegion& regionFirst, const MemRegion& regionSecond)
+            : first(regionFirst), second(regionSecond) {}
 
-        MemTransaction& operator=(const MemTransaction &other) {
+        MemTransaction& operator=(const MemTransaction& other) {
             first = other.first;
             second = other.second;
             return *this;
@@ -344,7 +343,7 @@ struct MessageQueue {
          */
         inline const MemRegion& getSecondRegion() const { return second; }
 
-    private:
+      private:
         /*
          * Given a start index and the number of messages to be
          * read/written, this helper method calculates the
@@ -355,11 +354,8 @@ struct MessageQueue {
          * Returns false if the 'startIdx' and 'nMessages' is
          * invalid for the MemTransaction object.
          */
-        bool inline getMemRegionInfo(size_t idx,
-                                     size_t nMessages,
-                                     size_t& firstCount,
-                                     size_t& secondCount,
-                                     T** firstBaseAddress,
+        bool inline getMemRegionInfo(size_t idx, size_t nMessages, size_t& firstCount,
+                                     size_t& secondCount, T** firstBaseAddress,
                                      T** secondBaseAddress);
         MemRegion first;
         MemRegion second;
@@ -415,8 +411,7 @@ struct MessageQueue {
      */
     bool commitRead(size_t nMessages);
 
-private:
-
+  private:
     size_t availableToWriteBytes() const;
     size_t availableToReadBytes() const;
 
@@ -471,8 +466,7 @@ T* MessageQueue<T, flavor>::MemTransaction::getSlot(size_t idx) {
 }
 
 template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::MemTransaction::getMemRegionInfo(size_t startIdx,
-                                                               size_t nMessages,
+bool MessageQueue<T, flavor>::MemTransaction::getMemRegionInfo(size_t startIdx, size_t nMessages,
                                                                size_t& firstCount,
                                                                size_t& secondCount,
                                                                T** firstBaseAddress,
@@ -489,8 +483,8 @@ bool MessageQueue<T, flavor>::MemTransaction::getMemRegionInfo(size_t startIdx,
     }
 
     /* Number of messages to be read/written to the first MemRegion. */
-    firstCount = startIdx < firstRegionLength ?
-            std::min(nMessages, firstRegionLength - startIdx) : 0;
+    firstCount =
+            startIdx < firstRegionLength ? std::min(nMessages, firstRegionLength - startIdx) : 0;
 
     /* Number of messages to be read/written to the second MemRegion. */
     secondCount = nMessages - firstCount;
@@ -514,13 +508,9 @@ bool MessageQueue<T, flavor>::MemTransaction::copyFrom(T* data, size_t startIdx,
     }
 
     size_t firstReadCount = 0, secondReadCount = 0;
-    T* firstBaseAddress = nullptr, * secondBaseAddress = nullptr;
+    T *firstBaseAddress = nullptr, *secondBaseAddress = nullptr;
 
-    if (getMemRegionInfo(startIdx,
-                         nMessages,
-                         firstReadCount,
-                         secondReadCount,
-                         &firstBaseAddress,
+    if (getMemRegionInfo(startIdx, nMessages, firstReadCount, secondReadCount, &firstBaseAddress,
                          &secondBaseAddress) == false) {
         /*
          * Returns false if 'startIdx' and 'nMessages' are invalid for this
@@ -534,30 +524,23 @@ bool MessageQueue<T, flavor>::MemTransaction::copyFrom(T* data, size_t startIdx,
     }
 
     if (secondReadCount != 0) {
-        memcpy(data + firstReadCount,
-               secondBaseAddress,
-               secondReadCount * sizeof(T));
+        memcpy(data + firstReadCount, secondBaseAddress, secondReadCount * sizeof(T));
     }
 
     return true;
 }
 
 template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::MemTransaction::copyTo(const T* data,
-                                                     size_t startIdx,
+bool MessageQueue<T, flavor>::MemTransaction::copyTo(const T* data, size_t startIdx,
                                                      size_t nMessages) {
     if (data == nullptr) {
         return false;
     }
 
     size_t firstWriteCount = 0, secondWriteCount = 0;
-    T * firstBaseAddress = nullptr, * secondBaseAddress = nullptr;
+    T *firstBaseAddress = nullptr, *secondBaseAddress = nullptr;
 
-    if (getMemRegionInfo(startIdx,
-                         nMessages,
-                         firstWriteCount,
-                         secondWriteCount,
-                         &firstBaseAddress,
+    if (getMemRegionInfo(startIdx, nMessages, firstWriteCount, secondWriteCount, &firstBaseAddress,
                          &secondBaseAddress) == false) {
         /*
          * Returns false if 'startIdx' and 'nMessages' are invalid for this
@@ -571,9 +554,7 @@ bool MessageQueue<T, flavor>::MemTransaction::copyTo(const T* data,
     }
 
     if (secondWriteCount != 0) {
-        memcpy(secondBaseAddress,
-               data + firstWriteCount,
-               secondWriteCount * sizeof(T));
+        memcpy(secondBaseAddress, data + firstWriteCount, secondWriteCount * sizeof(T));
     }
 
     return true;
@@ -592,8 +573,8 @@ void MessageQueue<T, flavor>::initMemory(bool resetPointers) {
     }
 
     if (flavor == kSynchronizedReadWrite) {
-        mReadPtr = reinterpret_cast<std::atomic<uint64_t>*>(
-                mapGrantorDescr(Descriptor::READPTRPOS));
+        mReadPtr =
+                reinterpret_cast<std::atomic<uint64_t>*>(mapGrantorDescr(Descriptor::READPTRPOS));
     } else {
         /*
          * The unsynchronized write flavor of the FMQ may have multiple readers
@@ -604,8 +585,7 @@ void MessageQueue<T, flavor>::initMemory(bool resetPointers) {
 
     details::check(mReadPtr != nullptr);
 
-    mWritePtr =
-            reinterpret_cast<std::atomic<uint64_t>*>(mapGrantorDescr(Descriptor::WRITEPTRPOS));
+    mWritePtr = reinterpret_cast<std::atomic<uint64_t>*>(mapGrantorDescr(Descriptor::WRITEPTRPOS));
     details::check(mWritePtr != nullptr);
 
     if (resetPointers) {
@@ -637,7 +617,6 @@ MessageQueue<T, flavor>::MessageQueue(const Descriptor& Desc, bool resetPointers
 
 template <typename T, MQFlavor flavor>
 MessageQueue<T, flavor>::MessageQueue(size_t numElementsInQueue, bool configureEventFlagWord) {
-
     // Check if the buffer size would not overflow size_t
     if (numElementsInQueue > SIZE_MAX / sizeof(T)) {
         return;
@@ -651,7 +630,7 @@ MessageQueue<T, flavor>::MessageQueue(size_t numElementsInQueue, bool configureE
     size_t kMetaDataSize = 2 * sizeof(android::hardware::RingBufferPosition);
 
     if (configureEventFlagWord) {
-        kMetaDataSize+= sizeof(std::atomic<uint32_t>);
+        kMetaDataSize += sizeof(std::atomic<uint32_t>);
     }
 
     /*
@@ -673,17 +652,14 @@ MessageQueue<T, flavor>::MessageQueue(size_t numElementsInQueue, bool configureE
     /*
      * The native handle will contain the fds to be mapped.
      */
-    native_handle_t* mqHandle =
-            native_handle_create(1 /* numFds */, 0 /* numInts */);
+    native_handle_t* mqHandle = native_handle_create(1 /* numFds */, 0 /* numInts */);
     if (mqHandle == nullptr) {
         return;
     }
 
     mqHandle->data[0] = ashmemFd;
-    mDesc = std::unique_ptr<Descriptor>(new (std::nothrow) Descriptor(kQueueSizeBytes,
-                                                                      mqHandle,
-                                                                      sizeof(T),
-                                                                      configureEventFlagWord));
+    mDesc = std::unique_ptr<Descriptor>(new (std::nothrow) Descriptor(
+            kQueueSizeBytes, mqHandle, sizeof(T), configureEventFlagWord));
     if (mDesc == nullptr) {
         return;
     }
@@ -722,17 +698,13 @@ bool MessageQueue<T, flavor>::read(T* data) {
 template <typename T, MQFlavor flavor>
 bool MessageQueue<T, flavor>::write(const T* data, size_t nMessages) {
     MemTransaction tx;
-    return beginWrite(nMessages, &tx) &&
-            tx.copyTo(data, 0 /* startIdx */, nMessages) &&
-            commitWrite(nMessages);
+    return beginWrite(nMessages, &tx) && tx.copyTo(data, 0 /* startIdx */, nMessages) &&
+           commitWrite(nMessages);
 }
 
 template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::writeBlocking(const T* data,
-                                            size_t count,
-                                            uint32_t readNotification,
-                                            uint32_t writeNotification,
-                                            int64_t timeOutNanos,
+bool MessageQueue<T, flavor>::writeBlocking(const T* data, size_t count, uint32_t readNotification,
+                                            uint32_t writeNotification, int64_t timeOutNanos,
                                             android::hardware::EventFlag* evFlag) {
     static_assert(flavor == kSynchronizedReadWrite,
                   "writeBlocking can only be used with the "
@@ -749,8 +721,8 @@ bool MessageQueue<T, flavor>::writeBlocking(const T* data,
         evFlag = mEventFlag;
         if (evFlag == nullptr) {
             details::logError(
-                "writeBlocking failed: called on MessageQueue with no Eventflag"
-                "configured or provided");
+                    "writeBlocking failed: called on MessageQueue with no Eventflag"
+                    "configured or provided");
             return false;
         }
     }
@@ -810,13 +782,12 @@ bool MessageQueue<T, flavor>::writeBlocking(const T* data,
          * notification.
          */
         uint32_t efState = 0;
-        status_t status = evFlag->wait(readNotification,
-                                       &efState,
-                                       timeOutNanos,
+        status_t status = evFlag->wait(readNotification, &efState, timeOutNanos,
                                        true /* retry on spurious wake */);
 
         if (status != android::TIMED_OUT && status != android::NO_ERROR) {
-            details::logError("Unexpected error code from EventFlag Wait status " + std::to_string(status));
+            details::logError("Unexpected error code from EventFlag Wait status " +
+                              std::to_string(status));
             break;
         }
 
@@ -842,18 +813,13 @@ bool MessageQueue<T, flavor>::writeBlocking(const T* data,
 }
 
 template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::writeBlocking(const T* data,
-                   size_t count,
-                   int64_t timeOutNanos) {
+bool MessageQueue<T, flavor>::writeBlocking(const T* data, size_t count, int64_t timeOutNanos) {
     return writeBlocking(data, count, FMQ_NOT_FULL, FMQ_NOT_EMPTY, timeOutNanos);
 }
 
 template <typename T, MQFlavor flavor>
-bool MessageQueue<T, flavor>::readBlocking(T* data,
-                                           size_t count,
-                                           uint32_t readNotification,
-                                           uint32_t writeNotification,
-                                           int64_t timeOutNanos,
+bool MessageQueue<T, flavor>::readBlocking(T* data, size_t count, uint32_t readNotification,
+                                           uint32_t writeNotification, int64_t timeOutNanos,
                                            android::hardware::EventFlag* evFlag) {
     static_assert(flavor == kSynchronizedReadWrite,
                   "readBlocking can only be used with the "
@@ -870,8 +836,8 @@ bool MessageQueue<T, flavor>::readBlocking(T* data,
         evFlag = mEventFlag;
         if (evFlag == nullptr) {
             details::logError(
-                "readBlocking failed: called on MessageQueue with no Eventflag"
-                "configured or provided");
+                    "readBlocking failed: called on MessageQueue with no Eventflag"
+                    "configured or provided");
             return false;
         }
     }
@@ -932,13 +898,12 @@ bool MessageQueue<T, flavor>::readBlocking(T* data,
          * notification.
          */
         uint32_t efState = 0;
-        status_t status = evFlag->wait(writeNotification,
-                                       &efState,
-                                       timeOutNanos,
+        status_t status = evFlag->wait(writeNotification, &efState, timeOutNanos,
                                        true /* retry on spurious wake */);
 
         if (status != android::TIMED_OUT && status != android::NO_ERROR) {
-            details::logError("Unexpected error code from EventFlag Wait status " + std::to_string(status));
+            details::logError("Unexpected error code from EventFlag Wait status " +
+                              std::to_string(status));
             break;
         }
 
@@ -1009,10 +974,9 @@ bool MessageQueue<T, flavor>::beginWrite(size_t nMessages, MemTransaction* resul
          * Wrap around is required. Both result.first and result.second are
          * populated.
          */
-        *result = MemTransaction(MemRegion(reinterpret_cast<T*>(mRing + writeOffset),
-                                           contiguousMessages),
-                                 MemRegion(reinterpret_cast<T*>(mRing),
-                                           nMessages - contiguousMessages));
+        *result = MemTransaction(
+                MemRegion(reinterpret_cast<T*>(mRing + writeOffset), contiguousMessages),
+                MemRegion(reinterpret_cast<T*>(mRing), nMessages - contiguousMessages));
     } else {
         /*
          * A wrap around is not required to write nMessages. Only result.first
@@ -1030,8 +994,8 @@ template <typename T, MQFlavor flavor>
  * Disable integer sanitization since integer overflow here is allowed
  * and legal.
  */
-__attribute__((no_sanitize("integer")))
-bool MessageQueue<T, flavor>::commitWrite(size_t nMessages) {
+__attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::commitWrite(
+        size_t nMessages) {
     size_t nBytesWritten = nMessages * sizeof(T);
     auto writePtr = mWritePtr->load(std::memory_order_relaxed);
     writePtr += nBytesWritten;
@@ -1050,16 +1014,14 @@ size_t MessageQueue<T, flavor>::availableToReadBytes() const {
      * hence requries a memory_order_acquired load for both mReadPtr and
      * mWritePtr.
      */
-    return mWritePtr->load(std::memory_order_acquire) -
-            mReadPtr->load(std::memory_order_acquire);
+    return mWritePtr->load(std::memory_order_acquire) - mReadPtr->load(std::memory_order_acquire);
 }
 
 template <typename T, MQFlavor flavor>
 bool MessageQueue<T, flavor>::read(T* data, size_t nMessages) {
     MemTransaction tx;
-    return beginRead(nMessages, &tx) &&
-            tx.copyFrom(data, 0 /* startIdx */, nMessages) &&
-            commitRead(nMessages);
+    return beginRead(nMessages, &tx) && tx.copyFrom(data, 0 /* startIdx */, nMessages) &&
+           commitRead(nMessages);
 }
 
 template <typename T, MQFlavor flavor>
@@ -1067,8 +1029,8 @@ template <typename T, MQFlavor flavor>
  * Disable integer sanitization since integer overflow here is allowed
  * and legal.
  */
-__attribute__((no_sanitize("integer")))
-bool MessageQueue<T, flavor>::beginRead(size_t nMessages, MemTransaction* result) const {
+__attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::beginRead(
+        size_t nMessages, MemTransaction* result) const {
     *result = MemTransaction();
     /*
      * If it is detected that the data in the queue was overwritten
@@ -1109,10 +1071,9 @@ bool MessageQueue<T, flavor>::beginRead(size_t nMessages, MemTransaction* result
          * A wrap around is required. Both result.first and result.second
          * are populated.
          */
-        *result = MemTransaction(MemRegion(reinterpret_cast<T*>(mRing + readOffset),
-                                           contiguousMessages),
-                                 MemRegion(reinterpret_cast<T*>(mRing),
-                                           nMessages - contiguousMessages));
+        *result = MemTransaction(
+                MemRegion(reinterpret_cast<T*>(mRing + readOffset), contiguousMessages),
+                MemRegion(reinterpret_cast<T*>(mRing), nMessages - contiguousMessages));
     } else {
         /*
          * A wrap around is not required. Only result.first need to be
@@ -1130,8 +1091,7 @@ template <typename T, MQFlavor flavor>
  * Disable integer sanitization since integer overflow here is allowed
  * and legal.
  */
-__attribute__((no_sanitize("integer")))
-bool MessageQueue<T, flavor>::commitRead(size_t nMessages) {
+__attribute__((no_sanitize("integer"))) bool MessageQueue<T, flavor>::commitRead(size_t nMessages) {
     // TODO: Use a local copy of readPtr to avoid relazed mReadPtr loads.
     auto readPtr = mReadPtr->load(std::memory_order_relaxed);
     auto writePtr = mWritePtr->load(std::memory_order_acquire);
@@ -1185,11 +1145,10 @@ void* MessageQueue<T, flavor>::mapGrantorDescr(uint32_t grantorIdx) {
      * Offset for mmap must be a multiple of PAGE_SIZE.
      */
     int mapOffset = (grantors[grantorIdx].offset / PAGE_SIZE) * PAGE_SIZE;
-    int mapLength =
-            grantors[grantorIdx].offset - mapOffset + grantors[grantorIdx].extent;
+    int mapLength = grantors[grantorIdx].offset - mapOffset + grantors[grantorIdx].extent;
 
-    void* address = mmap(0, mapLength, PROT_READ | PROT_WRITE, MAP_SHARED,
-                         handle->data[fdIndex], mapOffset);
+    void* address = mmap(0, mapLength, PROT_READ | PROT_WRITE, MAP_SHARED, handle->data[fdIndex],
+                         mapOffset);
     if (address == MAP_FAILED) {
         details::logError(std::string("mmap failed: ") + std::to_string(errno));
         return nullptr;
@@ -1198,18 +1157,16 @@ void* MessageQueue<T, flavor>::mapGrantorDescr(uint32_t grantorIdx) {
 }
 
 template <typename T, MQFlavor flavor>
-void MessageQueue<T, flavor>::unmapGrantorDescr(void* address,
-                                                uint32_t grantorIdx) {
+void MessageQueue<T, flavor>::unmapGrantorDescr(void* address, uint32_t grantorIdx) {
     auto grantors = mDesc->grantors();
     if ((address == nullptr) || (grantorIdx >= grantors.size())) {
         return;
     }
 
     int mapOffset = (grantors[grantorIdx].offset / PAGE_SIZE) * PAGE_SIZE;
-    int mapLength =
-            grantors[grantorIdx].offset - mapOffset + grantors[grantorIdx].extent;
-    void* baseAddress = reinterpret_cast<uint8_t*>(address) -
-            (grantors[grantorIdx].offset - mapOffset);
+    int mapLength = grantors[grantorIdx].offset - mapOffset + grantors[grantorIdx].extent;
+    void* baseAddress =
+            reinterpret_cast<uint8_t*>(address) - (grantors[grantorIdx].offset - mapOffset);
     if (baseAddress) munmap(baseAddress, mapLength);
 }
 
