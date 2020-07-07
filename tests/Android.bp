@@ -30,6 +30,7 @@ cc_test {
         "libhidlbase",
         "liblog",
         "libutils",
+        "libbinder_ndk",
     ],
 
     // Allow dlsym'ing self for statically linked passthrough implementations
@@ -37,8 +38,15 @@ cc_test {
 
     // These are static libs only for testing purposes and portability. Shared
     // libs should be used on device.
-    static_libs: ["android.hardware.tests.msgq@1.0"],
-    whole_static_libs: ["android.hardware.tests.msgq@1.0-impl"],
+    static_libs: [
+        "android.hardware.tests.msgq@1.0",
+        "android.fmq.test-ndk_platform",
+        "android.hardware.common-unstable-ndk_platform",
+    ],
+    whole_static_libs: [
+        "android.hardware.tests.msgq@1.0-impl",
+        "android.fmq.test-impl"
+    ],
 }
 
 cc_test {
@@ -52,6 +60,9 @@ cc_test {
         "libhidlbase",
         "liblog",
         "libutils",
+    ],
+    static_libs: [
+        "android.hardware.common-unstable-ndk_platform",
     ],
 
     cflags: [

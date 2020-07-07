@@ -1,0 +1,24 @@
+aidl_interface {
+    name: "android.fmq.test",
+    host_supported: true,
+    vendor_available: true,
+    unstable: true,
+    srcs: [
+        "android/fmq/test/*.aidl",
+    ],
+    imports: [
+        "android.hardware.common",
+    ],
+    gen_trace: true,
+    backend: {
+        java: {
+            enabled: false,
+        },
+        ndk: {
+            enabled: true,
+        },
+        cpp: {
+            enabled: false,
+        }
+    },
+}

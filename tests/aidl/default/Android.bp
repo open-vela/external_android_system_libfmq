@@ -1,0 +1,16 @@
+cc_library_static {
+    name: "android.fmq.test-impl",
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "libfmq",
+        "android.hardware.common-unstable-ndk_platform",
+    ],
+    static_libs: [
+        "android.fmq.test-ndk_platform",
+    ],
+    export_include_dirs: ["."],
+    srcs: [
+        "TestAidlMsgQ.cpp",
+    ],
+}
