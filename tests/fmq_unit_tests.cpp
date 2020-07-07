@@ -15,70 +15,97 @@
  */
 
 #include <asm-generic/mman.h>
+#include <fmq/AidlMessageQueue.h>
+#include <fmq/EventFlag.h>
+#include <fmq/MessageQueue.h>
 #include <gtest/gtest.h>
 #include <atomic>
 #include <cstdlib>
 #include <sstream>
 #include <thread>
-#include <fmq/MessageQueue.h>
-#include <fmq/EventFlag.h>
+
+using android::hardware::kSynchronizedReadWrite;
+using android::hardware::kUnsynchronizedWrite;
 
 enum EventFlagBits : uint32_t {
     kFmqNotEmpty = 1 << 0,
     kFmqNotFull = 1 << 1,
 };
 
-typedef android::hardware::MessageQueue<uint8_t, android::hardware::kSynchronizedReadWrite>
-          MessageQueueSync;
-typedef android::hardware::MessageQueue<uint8_t, android::hardware::kUnsynchronizedWrite>
-            MessageQueueUnsync;
+typedef android::AidlMessageQueue<uint8_t, kSynchronizedReadWrite> AidlMessageQueueSync;
+typedef android::AidlMessageQueue<uint8_t, kUnsynchronizedWrite> AidlMessageQueueUnsync;
+typedef android::hardware::MessageQueue<uint8_t, kSynchronizedReadWrite> MessageQueueSync;
+typedef android::hardware::MessageQueue<uint8_t, kUnsynchronizedWrite> MessageQueueUnsync;
+typedef android::AidlMessageQueue<uint16_t, kSynchronizedReadWrite> AidlMessageQueueSync16;
+typedef android::hardware::MessageQueue<uint16_t, kSynchronizedReadWrite> MessageQueueSync16;
 
-class SynchronizedReadWrites : public ::testing::Test {
-protected:
+// Run everything on both the AIDL and HIDL versions with sync and unsync flavors
+typedef ::testing::Types<AidlMessageQueueSync, MessageQueueSync> SyncTypes;
+typedef ::testing::Types<AidlMessageQueueUnsync, MessageQueueUnsync> UnsyncTypes;
+typedef ::testing::Types<AidlMessageQueueSync16, MessageQueueSync16> BadConfigTypes;
+
+template <typename T>
+class TestBase : public ::testing::Test {
+  public:
+    static void ReaderThreadBlocking(T* fmq, std::atomic<uint32_t>* fwAddr);
+    static void ReaderThreadBlocking2(T* fmq, std::atomic<uint32_t>* fwAddr);
+};
+
+TYPED_TEST_CASE(SynchronizedReadWrites, SyncTypes);
+
+template <typename T>
+class SynchronizedReadWrites : public TestBase<T> {
+  protected:
     virtual void TearDown() {
         delete mQueue;
     }
 
     virtual void SetUp() {
         static constexpr size_t kNumElementsInQueue = 2048;
-        mQueue = new (std::nothrow) MessageQueueSync(kNumElementsInQueue);
+        mQueue = new (std::nothrow) T(kNumElementsInQueue);
         ASSERT_NE(nullptr, mQueue);
         ASSERT_TRUE(mQueue->isValid());
         mNumMessagesMax = mQueue->getQuantumCount();
         ASSERT_EQ(kNumElementsInQueue, mNumMessagesMax);
     }
 
-    MessageQueueSync* mQueue = nullptr;
+    T* mQueue = nullptr;
     size_t mNumMessagesMax = 0;
 };
 
-class UnsynchronizedWrite : public ::testing::Test {
-protected:
+TYPED_TEST_CASE(UnsynchronizedWrite, UnsyncTypes);
+
+template <typename T>
+class UnsynchronizedWrite : public TestBase<T> {
+  protected:
     virtual void TearDown() {
         delete mQueue;
     }
 
     virtual void SetUp() {
         static constexpr size_t kNumElementsInQueue = 2048;
-        mQueue = new (std::nothrow) MessageQueueUnsync(kNumElementsInQueue);
+        mQueue = new (std::nothrow) T(kNumElementsInQueue);
         ASSERT_NE(nullptr, mQueue);
         ASSERT_TRUE(mQueue->isValid());
         mNumMessagesMax = mQueue->getQuantumCount();
         ASSERT_EQ(kNumElementsInQueue, mNumMessagesMax);
     }
 
-    MessageQueueUnsync* mQueue = nullptr;
+    T* mQueue = nullptr;
     size_t mNumMessagesMax = 0;
 };
 
-class BlockingReadWrites : public ::testing::Test {
-protected:
+TYPED_TEST_CASE(BlockingReadWrites, SyncTypes);
+
+template <typename T>
+class BlockingReadWrites : public TestBase<T> {
+  protected:
     virtual void TearDown() {
         delete mQueue;
     }
     virtual void SetUp() {
         static constexpr size_t kNumElementsInQueue = 2048;
-        mQueue = new (std::nothrow) MessageQueueSync(kNumElementsInQueue);
+        mQueue = new (std::nothrow) T(kNumElementsInQueue);
         ASSERT_NE(nullptr, mQueue);
         ASSERT_TRUE(mQueue->isValid());
         mNumMessagesMax = mQueue->getQuantumCount();
@@ -89,38 +116,40 @@ protected:
         std::atomic_init(&mFw, static_cast<uint32_t>(kFmqNotFull));
     }
 
-    MessageQueueSync* mQueue;
+    T* mQueue;
     std::atomic<uint32_t> mFw;
     size_t mNumMessagesMax = 0;
 };
 
-class QueueSizeOdd : public ::testing::Test {
-protected:
-  virtual void TearDown() {
-      delete mQueue;
-  }
-  virtual void SetUp() {
-      static constexpr size_t kNumElementsInQueue = 2049;
-      mQueue = new (std::nothrow) MessageQueueSync(kNumElementsInQueue,
-                                                   true /* configureEventFlagWord */);
-      ASSERT_NE(nullptr, mQueue);
-      ASSERT_TRUE(mQueue->isValid());
-      mNumMessagesMax = mQueue->getQuantumCount();
-      ASSERT_EQ(kNumElementsInQueue, mNumMessagesMax);
-      auto evFlagWordPtr = mQueue->getEventFlagWord();
-      ASSERT_NE(nullptr, evFlagWordPtr);
-      /*
-       * Initialize the EventFlag word to indicate Queue is not full.
-       */
-      std::atomic_init(evFlagWordPtr, static_cast<uint32_t>(kFmqNotFull));
-  }
+TYPED_TEST_CASE(QueueSizeOdd, SyncTypes);
 
-  MessageQueueSync* mQueue;
-  size_t mNumMessagesMax = 0;
+template <typename T>
+class QueueSizeOdd : public TestBase<T> {
+  protected:
+    virtual void TearDown() { delete mQueue; }
+    virtual void SetUp() {
+        static constexpr size_t kNumElementsInQueue = 2049;
+        mQueue = new (std::nothrow) T(kNumElementsInQueue, true /* configureEventFlagWord */);
+        ASSERT_NE(nullptr, mQueue);
+        ASSERT_TRUE(mQueue->isValid());
+        mNumMessagesMax = mQueue->getQuantumCount();
+        ASSERT_EQ(kNumElementsInQueue, mNumMessagesMax);
+        auto evFlagWordPtr = mQueue->getEventFlagWord();
+        ASSERT_NE(nullptr, evFlagWordPtr);
+        /*
+         * Initialize the EventFlag word to indicate Queue is not full.
+         */
+        std::atomic_init(evFlagWordPtr, static_cast<uint32_t>(kFmqNotFull));
+    }
+
+    T* mQueue;
+    size_t mNumMessagesMax = 0;
 };
 
-class BadQueueConfig: public ::testing::Test {
-};
+TYPED_TEST_CASE(BadQueueConfig, BadConfigTypes);
+
+template <typename T>
+class BadQueueConfig : public TestBase<T> {};
 
 /*
  * Utility function to initialize data to be written to the FMQ
@@ -136,10 +165,8 @@ inline void initData(uint8_t* data, size_t count) {
  * it checks if the kFmqNotEmpty bit is actually set.
  * If the read is succesful, it signals Wake to kFmqNotFull.
  */
-void ReaderThreadBlocking(
-        android::hardware::MessageQueue<uint8_t,
-        android::hardware::kSynchronizedReadWrite>* fmq,
-        std::atomic<uint32_t>* fwAddr) {
+template <typename T>
+void TestBase<T>::ReaderThreadBlocking(T* fmq, std::atomic<uint32_t>* fwAddr) {
     const size_t dataLen = 64;
     uint8_t data[dataLen];
     android::hardware::EventFlag* efGroup = nullptr;
@@ -171,10 +198,8 @@ void ReaderThreadBlocking(
  * This thread will attempt to read and block using the readBlocking() API and
  * passes in a pointer to an EventFlag object.
  */
-void ReaderThreadBlocking2(
-        android::hardware::MessageQueue<uint8_t,
-        android::hardware::kSynchronizedReadWrite>* fmq,
-        std::atomic<uint32_t>* fwAddr) {
+template <typename T>
+void TestBase<T>::ReaderThreadBlocking2(T* fmq, std::atomic<uint32_t>* fwAddr) {
     const size_t dataLen = 64;
     uint8_t data[dataLen];
     android::hardware::EventFlag* efGroup = nullptr;
@@ -192,12 +217,9 @@ void ReaderThreadBlocking2(
     ASSERT_EQ(android::NO_ERROR, status);
 }
 
-
-TEST_F(BadQueueConfig, QueueSizeTooLarge) {
-    typedef android::hardware::MessageQueue<uint16_t, android::hardware::kSynchronizedReadWrite>
-            MessageQueueSync16;
+TYPED_TEST(BadQueueConfig, QueueSizeTooLarge) {
     size_t numElementsInQueue = SIZE_MAX / sizeof(uint16_t) + 1;
-    MessageQueueSync16 * fmq = new (std::nothrow) MessageQueueSync16(numElementsInQueue);
+    TypeParam* fmq = new (std::nothrow) TypeParam(numElementsInQueue);
     ASSERT_NE(nullptr, fmq);
     /*
      * Should fail due to size being too large to fit into size_t.
@@ -209,12 +231,12 @@ TEST_F(BadQueueConfig, QueueSizeTooLarge) {
  * Test that basic blocking works. This test uses the non-blocking read()/write()
  * APIs.
  */
-TEST_F(BlockingReadWrites, SmallInputTest1) {
+TYPED_TEST(BlockingReadWrites, SmallInputTest1) {
     const size_t dataLen = 64;
     uint8_t data[dataLen] = {0};
 
     android::hardware::EventFlag* efGroup = nullptr;
-    android::status_t status = android::hardware::EventFlag::createEventFlag(&mFw, &efGroup);
+    android::status_t status = android::hardware::EventFlag::createEventFlag(&this->mFw, &efGroup);
 
     ASSERT_EQ(android::NO_ERROR, status);
     ASSERT_NE(nullptr, efGroup);
@@ -222,7 +244,8 @@ TEST_F(BlockingReadWrites, SmallInputTest1) {
     /*
      * Start a thread that will try to read and block on kFmqNotEmpty.
      */
-    std::thread Reader(ReaderThreadBlocking, mQueue, &mFw);
+    std::thread Reader(BlockingReadWrites<TypeParam>::ReaderThreadBlocking, this->mQueue,
+                       &this->mFw);
     struct timespec waitTime = {0, 100 * 1000000};
     ASSERT_EQ(0, nanosleep(&waitTime, NULL));
 
@@ -230,7 +253,7 @@ TEST_F(BlockingReadWrites, SmallInputTest1) {
      * After waiting for some time write into the FMQ
      * and call Wake on kFmqNotEmpty.
      */
-    ASSERT_TRUE(mQueue->write(data, dataLen));
+    ASSERT_TRUE(this->mQueue->write(data, dataLen));
     status = efGroup->wake(kFmqNotEmpty);
     ASSERT_EQ(android::NO_ERROR, status);
 
@@ -245,12 +268,12 @@ TEST_F(BlockingReadWrites, SmallInputTest1) {
  * Test that basic blocking works. This test uses the
  * writeBlocking()/readBlocking() APIs.
  */
-TEST_F(BlockingReadWrites, SmallInputTest2) {
+TYPED_TEST(BlockingReadWrites, SmallInputTest2) {
     const size_t dataLen = 64;
     uint8_t data[dataLen] = {0};
 
     android::hardware::EventFlag* efGroup = nullptr;
-    android::status_t status = android::hardware::EventFlag::createEventFlag(&mFw, &efGroup);
+    android::status_t status = android::hardware::EventFlag::createEventFlag(&this->mFw, &efGroup);
 
     ASSERT_EQ(android::NO_ERROR, status);
     ASSERT_NE(nullptr, efGroup);
@@ -259,13 +282,11 @@ TEST_F(BlockingReadWrites, SmallInputTest2) {
      * Start a thread that will try to read and block on kFmqNotEmpty. It will
      * call wake() on kFmqNotFull when the read is successful.
      */
-    std::thread Reader(ReaderThreadBlocking2, mQueue, &mFw);
-    bool ret = mQueue->writeBlocking(data,
-                                     dataLen,
-                                     static_cast<uint32_t>(kFmqNotFull),
-                                     static_cast<uint32_t>(kFmqNotEmpty),
-                                     5000000000 /* timeOutNanos */,
-                                     efGroup);
+    std::thread Reader(BlockingReadWrites<TypeParam>::ReaderThreadBlocking2, this->mQueue,
+                       &this->mFw);
+    bool ret = this->mQueue->writeBlocking(data, dataLen, static_cast<uint32_t>(kFmqNotFull),
+                                           static_cast<uint32_t>(kFmqNotEmpty),
+                                           5000000000 /* timeOutNanos */, efGroup);
     ASSERT_TRUE(ret);
     Reader.join();
 
@@ -276,9 +297,9 @@ TEST_F(BlockingReadWrites, SmallInputTest2) {
 /*
  * Test that basic blocking times out as intended.
  */
-TEST_F(BlockingReadWrites, BlockingTimeOutTest) {
+TYPED_TEST(BlockingReadWrites, BlockingTimeOutTest) {
     android::hardware::EventFlag* efGroup = nullptr;
-    android::status_t status = android::hardware::EventFlag::createEventFlag(&mFw, &efGroup);
+    android::status_t status = android::hardware::EventFlag::createEventFlag(&this->mFw, &efGroup);
 
     ASSERT_EQ(android::NO_ERROR, status);
     ASSERT_NE(nullptr, efGroup);
@@ -301,31 +322,29 @@ TEST_F(BlockingReadWrites, BlockingTimeOutTest) {
  * Test that odd queue sizes do not cause unaligned error
  * on access to EventFlag object.
  */
-TEST_F(QueueSizeOdd, EventFlagTest) {
+TYPED_TEST(QueueSizeOdd, EventFlagTest) {
     const size_t dataLen = 64;
     uint8_t data[dataLen] = {0};
 
-    bool ret = mQueue->writeBlocking(data,
-                                     dataLen,
-                                     static_cast<uint32_t>(kFmqNotFull),
-                                     static_cast<uint32_t>(kFmqNotEmpty),
-                                     5000000000 /* timeOutNanos */);
+    bool ret = this->mQueue->writeBlocking(data, dataLen, static_cast<uint32_t>(kFmqNotFull),
+                                           static_cast<uint32_t>(kFmqNotEmpty),
+                                           5000000000 /* timeOutNanos */);
     ASSERT_TRUE(ret);
 }
 
 /*
  * Verify that a few bytes of data can be successfully written and read.
  */
-TEST_F(SynchronizedReadWrites, SmallInputTest1) {
+TYPED_TEST(SynchronizedReadWrites, SmallInputTest1) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
 
     initData(data, dataLen);
 
-    ASSERT_TRUE(mQueue->write(data, dataLen));
+    ASSERT_TRUE(this->mQueue->write(data, dataLen));
     uint8_t readData[dataLen] = {};
-    ASSERT_TRUE(mQueue->read(readData, dataLen));
+    ASSERT_TRUE(this->mQueue->read(readData, dataLen));
     ASSERT_EQ(0, memcmp(data, readData, dataLen));
 }
 
@@ -333,27 +352,27 @@ TEST_F(SynchronizedReadWrites, SmallInputTest1) {
  * Verify that a few bytes of data can be successfully written and read using
  * beginRead/beginWrite/CommitRead/CommitWrite
  */
-TEST_F(SynchronizedReadWrites, SmallInputTest2) {
+TYPED_TEST(SynchronizedReadWrites, SmallInputTest2) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
 
     initData(data, dataLen);
 
-    MessageQueueSync::MemTransaction tx;
-    ASSERT_TRUE(mQueue->beginWrite(dataLen, &tx));
+    typename TypeParam::MemTransaction tx;
+    ASSERT_TRUE(this->mQueue->beginWrite(dataLen, &tx));
 
     ASSERT_TRUE(tx.copyTo(data, 0 /* startIdx */, dataLen));
 
-    ASSERT_TRUE(mQueue->commitWrite(dataLen));
+    ASSERT_TRUE(this->mQueue->commitWrite(dataLen));
 
     uint8_t readData[dataLen] = {};
 
-    ASSERT_TRUE(mQueue->beginRead(dataLen, &tx));
+    ASSERT_TRUE(this->mQueue->beginRead(dataLen, &tx));
 
     ASSERT_TRUE(tx.copyFrom(readData, 0 /* startIdx */, dataLen));
 
-    ASSERT_TRUE(mQueue->commitRead(dataLen));
+    ASSERT_TRUE(this->mQueue->commitRead(dataLen));
 
     ASSERT_EQ(0, memcmp(data, readData, dataLen));
 }
@@ -362,14 +381,14 @@ TEST_F(SynchronizedReadWrites, SmallInputTest2) {
  * Verify that a few bytes of data can be successfully written and read using
  * beginRead/beginWrite/CommitRead/CommitWrite as well as getSlot().
  */
-TEST_F(SynchronizedReadWrites, SmallInputTest3) {
+TYPED_TEST(SynchronizedReadWrites, SmallInputTest3) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
 
     initData(data, dataLen);
-    MessageQueueSync::MemTransaction tx;
-    ASSERT_TRUE(mQueue->beginWrite(dataLen, &tx));
+    typename TypeParam::MemTransaction tx;
+    ASSERT_TRUE(this->mQueue->beginWrite(dataLen, &tx));
 
     auto first = tx.getFirstRegion();
     auto second = tx.getSecondRegion();
@@ -380,11 +399,11 @@ TEST_F(SynchronizedReadWrites, SmallInputTest3) {
         *ptr = data[i];
     }
 
-    ASSERT_TRUE(mQueue->commitWrite(dataLen));
+    ASSERT_TRUE(this->mQueue->commitWrite(dataLen));
 
     uint8_t readData[dataLen] = {};
 
-    ASSERT_TRUE(mQueue->beginRead(dataLen, &tx));
+    ASSERT_TRUE(this->mQueue->beginRead(dataLen, &tx));
 
     first = tx.getFirstRegion();
     second = tx.getSecondRegion();
@@ -396,7 +415,7 @@ TEST_F(SynchronizedReadWrites, SmallInputTest3) {
         readData[i] = *ptr;
     }
 
-    ASSERT_TRUE(mQueue->commitRead(dataLen));
+    ASSERT_TRUE(this->mQueue->commitRead(dataLen));
 
     ASSERT_EQ(0, memcmp(data, readData, dataLen));
 }
@@ -404,25 +423,25 @@ TEST_F(SynchronizedReadWrites, SmallInputTest3) {
 /*
  * Verify that read() returns false when trying to read from an empty queue.
  */
-TEST_F(SynchronizedReadWrites, ReadWhenEmpty1) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+TYPED_TEST(SynchronizedReadWrites, ReadWhenEmpty1) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t dataLen = 2;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t readData[dataLen];
-    ASSERT_FALSE(mQueue->read(readData, dataLen));
+    ASSERT_FALSE(this->mQueue->read(readData, dataLen));
 }
 
 /*
  * Verify that beginRead() returns a MemTransaction object with null pointers when trying
  * to read from an empty queue.
  */
-TEST_F(SynchronizedReadWrites, ReadWhenEmpty2) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+TYPED_TEST(SynchronizedReadWrites, ReadWhenEmpty2) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t dataLen = 2;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
 
-    MessageQueueSync::MemTransaction tx;
-    ASSERT_FALSE(mQueue->beginRead(dataLen, &tx));
+    typename TypeParam::MemTransaction tx;
+    ASSERT_FALSE(this->mQueue->beginRead(dataLen, &tx));
 
     auto first = tx.getFirstRegion();
     auto second = tx.getSecondRegion();
@@ -435,17 +454,17 @@ TEST_F(SynchronizedReadWrites, ReadWhenEmpty2) {
  * Write the queue until full. Verify that another write is unsuccessful.
  * Verify that availableToWrite() returns 0 as expected.
  */
-TEST_F(SynchronizedReadWrites, WriteWhenFull1) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
-    std::vector<uint8_t> data(mNumMessagesMax);
+TYPED_TEST(SynchronizedReadWrites, WriteWhenFull1) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
+    std::vector<uint8_t> data(this->mNumMessagesMax);
 
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    ASSERT_EQ(0UL, mQueue->availableToWrite());
-    ASSERT_FALSE(mQueue->write(&data[0], 1));
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    ASSERT_EQ(0UL, this->mQueue->availableToWrite());
+    ASSERT_FALSE(this->mQueue->write(&data[0], 1));
 
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_TRUE(mQueue->read(&readData[0], mNumMessagesMax));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_EQ(data, readData);
 }
 
@@ -453,16 +472,16 @@ TEST_F(SynchronizedReadWrites, WriteWhenFull1) {
  * Write the queue until full. Verify that beginWrite() returns
  * a MemTransaction object with null base pointers.
  */
-TEST_F(SynchronizedReadWrites, WriteWhenFull2) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
-    std::vector<uint8_t> data(mNumMessagesMax);
+TYPED_TEST(SynchronizedReadWrites, WriteWhenFull2) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
+    std::vector<uint8_t> data(this->mNumMessagesMax);
 
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    ASSERT_EQ(0UL, mQueue->availableToWrite());
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    ASSERT_EQ(0UL, this->mQueue->availableToWrite());
 
-    MessageQueueSync::MemTransaction tx;
-    ASSERT_FALSE(mQueue->beginWrite(1, &tx));
+    typename TypeParam::MemTransaction tx;
+    ASSERT_FALSE(this->mQueue->beginWrite(1, &tx));
 
     auto first = tx.getFirstRegion();
     auto second = tx.getSecondRegion();
@@ -476,12 +495,12 @@ TEST_F(SynchronizedReadWrites, WriteWhenFull2) {
  * Verify that the write is successful and the subsequent read
  * returns the expected data.
  */
-TEST_F(SynchronizedReadWrites, LargeInputTest1) {
-    std::vector<uint8_t> data(mNumMessagesMax);
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_TRUE(mQueue->read(&readData[0], mNumMessagesMax));
+TYPED_TEST(SynchronizedReadWrites, LargeInputTest1) {
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_EQ(data, readData);
 }
 
@@ -490,18 +509,18 @@ TEST_F(SynchronizedReadWrites, LargeInputTest1) {
  * Verify that it fails. Verify that a subsequent read fails and
  * the queue is still empty.
  */
-TEST_F(SynchronizedReadWrites, LargeInputTest2) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+TYPED_TEST(SynchronizedReadWrites, LargeInputTest2) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t dataLen = 4096;
-    ASSERT_GT(dataLen, mNumMessagesMax);
+    ASSERT_GT(dataLen, this->mNumMessagesMax);
     std::vector<uint8_t> data(dataLen);
 
     initData(&data[0], dataLen);
-    ASSERT_FALSE(mQueue->write(&data[0], dataLen));
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_FALSE(mQueue->read(&readData[0], mNumMessagesMax));
+    ASSERT_FALSE(this->mQueue->write(&data[0], dataLen));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_FALSE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_NE(data, readData);
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
 }
 
 /*
@@ -509,13 +528,13 @@ TEST_F(SynchronizedReadWrites, LargeInputTest2) {
  * the attempt returns false. Verify that the attempt did not
  * affect the pre-existing data in the queue.
  */
-TEST_F(SynchronizedReadWrites, LargeInputTest3) {
-    std::vector<uint8_t> data(mNumMessagesMax);
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    ASSERT_FALSE(mQueue->write(&data[0], 1));
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_TRUE(mQueue->read(&readData[0], mNumMessagesMax));
+TYPED_TEST(SynchronizedReadWrites, LargeInputTest3) {
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    ASSERT_FALSE(this->mQueue->write(&data[0], 1));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_EQ(data, readData);
 }
 
@@ -524,13 +543,13 @@ TEST_F(SynchronizedReadWrites, LargeInputTest3) {
  * null base pointers when attempting to write data larger
  * than the queue size.
  */
-TEST_F(SynchronizedReadWrites, LargeInputTest4) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+TYPED_TEST(SynchronizedReadWrites, LargeInputTest4) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t dataLen = 4096;
-    ASSERT_GT(dataLen, mNumMessagesMax);
+    ASSERT_GT(dataLen, this->mNumMessagesMax);
 
-    MessageQueueSync::MemTransaction tx;
-    ASSERT_FALSE(mQueue->beginWrite(dataLen, &tx));
+    typename TypeParam::MemTransaction tx;
+    ASSERT_FALSE(this->mQueue->beginWrite(dataLen, &tx));
 
     auto first = tx.getFirstRegion();
     auto second = tx.getSecondRegion();
@@ -542,18 +561,18 @@ TEST_F(SynchronizedReadWrites, LargeInputTest4) {
 /*
  * Verify that multiple reads one after the other return expected data.
  */
-TEST_F(SynchronizedReadWrites, MultipleRead) {
+TYPED_TEST(SynchronizedReadWrites, MultipleRead) {
     const size_t chunkSize = 100;
     const size_t chunkNum = 5;
     const size_t dataLen = chunkSize * chunkNum;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
 
     initData(data, dataLen);
-    ASSERT_TRUE(mQueue->write(data, dataLen));
+    ASSERT_TRUE(this->mQueue->write(data, dataLen));
     uint8_t readData[dataLen] = {};
     for (size_t i = 0; i < chunkNum; i++) {
-        ASSERT_TRUE(mQueue->read(readData + i * chunkSize, chunkSize));
+        ASSERT_TRUE(this->mQueue->read(readData + i * chunkSize, chunkSize));
     }
     ASSERT_EQ(0, memcmp(readData, data, dataLen));
 }
@@ -561,37 +580,37 @@ TEST_F(SynchronizedReadWrites, MultipleRead) {
 /*
  * Verify that multiple writes one after the other happens correctly.
  */
-TEST_F(SynchronizedReadWrites, MultipleWrite) {
+TYPED_TEST(SynchronizedReadWrites, MultipleWrite) {
     const int chunkSize = 100;
     const int chunkNum = 5;
     const size_t dataLen = chunkSize * chunkNum;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
 
     initData(data, dataLen);
     for (unsigned int i = 0; i < chunkNum; i++) {
-        ASSERT_TRUE(mQueue->write(data + i * chunkSize, chunkSize));
+        ASSERT_TRUE(this->mQueue->write(data + i * chunkSize, chunkSize));
     }
     uint8_t readData[dataLen] = {};
-    ASSERT_TRUE(mQueue->read(readData, dataLen));
+    ASSERT_TRUE(this->mQueue->read(readData, dataLen));
     ASSERT_EQ(0, memcmp(readData, data, dataLen));
 }
 
 /*
  * Write enough messages into the FMQ to fill half of it
  * and read back the same.
- * Write mNumMessagesMax messages into the queue. This will cause a
+ * Write this->mNumMessagesMax messages into the queue. This will cause a
  * wrap around. Read and verify the data.
  */
-TEST_F(SynchronizedReadWrites, ReadWriteWrapAround1) {
-    size_t numMessages = mNumMessagesMax - 1;
-    std::vector<uint8_t> data(mNumMessagesMax);
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], numMessages));
-    ASSERT_TRUE(mQueue->read(&readData[0], numMessages));
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    ASSERT_TRUE(mQueue->read(&readData[0], mNumMessagesMax));
+TYPED_TEST(SynchronizedReadWrites, ReadWriteWrapAround1) {
+    size_t numMessages = this->mNumMessagesMax - 1;
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], numMessages));
+    ASSERT_TRUE(this->mQueue->read(&readData[0], numMessages));
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    ASSERT_TRUE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_EQ(data, readData);
 }
 
@@ -603,38 +622,38 @@ TEST_F(SynchronizedReadWrites, ReadWriteWrapAround1) {
  * Write mNumMessagesMax messages into the queue. This will cause a
  * wrap around. Read and verify the data.
  */
-TEST_F(SynchronizedReadWrites, ReadWriteWrapAround2) {
-    size_t dataLen = mNumMessagesMax - 1;
-    std::vector<uint8_t> data(mNumMessagesMax);
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], dataLen));
-    ASSERT_TRUE(mQueue->read(&readData[0], dataLen));
+TYPED_TEST(SynchronizedReadWrites, ReadWriteWrapAround2) {
+    size_t dataLen = this->mNumMessagesMax - 1;
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], dataLen));
+    ASSERT_TRUE(this->mQueue->read(&readData[0], dataLen));
 
     /*
      * The next write and read will have to deal with with wrap arounds.
      */
-    MessageQueueSync::MemTransaction tx;
-    ASSERT_TRUE(mQueue->beginWrite(mNumMessagesMax, &tx));
+    typename TypeParam::MemTransaction tx;
+    ASSERT_TRUE(this->mQueue->beginWrite(this->mNumMessagesMax, &tx));
 
     auto first = tx.getFirstRegion();
     auto second = tx.getSecondRegion();
 
-    ASSERT_EQ(first.getLength() + second.getLength(), mNumMessagesMax);
+    ASSERT_EQ(first.getLength() + second.getLength(), this->mNumMessagesMax);
 
-    ASSERT_TRUE(tx.copyTo(&data[0], 0 /* startIdx */,  mNumMessagesMax));
+    ASSERT_TRUE(tx.copyTo(&data[0], 0 /* startIdx */, this->mNumMessagesMax));
 
-    ASSERT_TRUE(mQueue->commitWrite(mNumMessagesMax));
+    ASSERT_TRUE(this->mQueue->commitWrite(this->mNumMessagesMax));
 
-    ASSERT_TRUE(mQueue->beginRead(mNumMessagesMax, &tx));
+    ASSERT_TRUE(this->mQueue->beginRead(this->mNumMessagesMax, &tx));
 
     first = tx.getFirstRegion();
     second = tx.getSecondRegion();
 
-    ASSERT_EQ(first.getLength() + second.getLength(), mNumMessagesMax);
+    ASSERT_EQ(first.getLength() + second.getLength(), this->mNumMessagesMax);
 
-    ASSERT_TRUE(tx.copyFrom(&readData[0], 0 /* startIdx */, mNumMessagesMax));
-    ASSERT_TRUE(mQueue->commitRead(mNumMessagesMax));
+    ASSERT_TRUE(tx.copyFrom(&readData[0], 0 /* startIdx */, this->mNumMessagesMax));
+    ASSERT_TRUE(this->mQueue->commitRead(this->mNumMessagesMax));
 
     ASSERT_EQ(data, readData);
 }
@@ -642,44 +661,44 @@ TEST_F(SynchronizedReadWrites, ReadWriteWrapAround2) {
 /*
  * Verify that a few bytes of data can be successfully written and read.
  */
-TEST_F(UnsynchronizedWrite, SmallInputTest1) {
+TYPED_TEST(UnsynchronizedWrite, SmallInputTest1) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
 
     initData(data, dataLen);
-    ASSERT_TRUE(mQueue->write(data, dataLen));
+    ASSERT_TRUE(this->mQueue->write(data, dataLen));
     uint8_t readData[dataLen] = {};
-    ASSERT_TRUE(mQueue->read(readData, dataLen));
+    ASSERT_TRUE(this->mQueue->read(readData, dataLen));
     ASSERT_EQ(0, memcmp(data, readData, dataLen));
 }
 
 /*
  * Verify that read() returns false when trying to read from an empty queue.
  */
-TEST_F(UnsynchronizedWrite, ReadWhenEmpty) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+TYPED_TEST(UnsynchronizedWrite, ReadWhenEmpty) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t dataLen = 2;
-    ASSERT_TRUE(dataLen < mNumMessagesMax);
+    ASSERT_TRUE(dataLen < this->mNumMessagesMax);
     uint8_t readData[dataLen];
-    ASSERT_FALSE(mQueue->read(readData, dataLen));
+    ASSERT_FALSE(this->mQueue->read(readData, dataLen));
 }
 
 /*
  * Write the queue when full. Verify that a subsequent writes is succesful.
  * Verify that availableToWrite() returns 0 as expected.
  */
-TEST_F(UnsynchronizedWrite, WriteWhenFull1) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
-    std::vector<uint8_t> data(mNumMessagesMax);
+TYPED_TEST(UnsynchronizedWrite, WriteWhenFull1) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
+    std::vector<uint8_t> data(this->mNumMessagesMax);
 
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    ASSERT_EQ(0UL, mQueue->availableToWrite());
-    ASSERT_TRUE(mQueue->write(&data[0], 1));
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    ASSERT_EQ(0UL, this->mQueue->availableToWrite());
+    ASSERT_TRUE(this->mQueue->write(&data[0], 1));
 
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_FALSE(mQueue->read(&readData[0], mNumMessagesMax));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_FALSE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
 }
 
 /*
@@ -687,22 +706,22 @@ TEST_F(UnsynchronizedWrite, WriteWhenFull1) {
  * using beginRead()/commitRead() is succesful.
  * Verify that the next read fails as expected for unsynchronized flavor.
  */
-TEST_F(UnsynchronizedWrite, WriteWhenFull2) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
-    std::vector<uint8_t> data(mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
+TYPED_TEST(UnsynchronizedWrite, WriteWhenFull2) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
 
-    MessageQueueUnsync::MemTransaction tx;
-    ASSERT_TRUE(mQueue->beginWrite(1, &tx));
+    typename TypeParam::MemTransaction tx;
+    ASSERT_TRUE(this->mQueue->beginWrite(1, &tx));
 
     ASSERT_EQ(tx.getFirstRegion().getLength(), 1U);
 
     ASSERT_TRUE(tx.copyTo(&data[0], 0 /* startIdx */));
 
-    ASSERT_TRUE(mQueue->commitWrite(1));
+    ASSERT_TRUE(this->mQueue->commitWrite(1));
 
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_FALSE(mQueue->read(&readData[0], mNumMessagesMax));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_FALSE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
 }
 
 /*
@@ -710,12 +729,12 @@ TEST_F(UnsynchronizedWrite, WriteWhenFull2) {
  * Verify that the write is successful and the subsequent read
  * returns the expected data.
  */
-TEST_F(UnsynchronizedWrite, LargeInputTest1) {
-    std::vector<uint8_t> data(mNumMessagesMax);
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_TRUE(mQueue->read(&readData[0], mNumMessagesMax));
+TYPED_TEST(UnsynchronizedWrite, LargeInputTest1) {
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_EQ(data, readData);
 }
 
@@ -724,17 +743,17 @@ TEST_F(UnsynchronizedWrite, LargeInputTest1) {
  * Verify that it fails. Verify that a subsequent read fails and
  * the queue is still empty.
  */
-TEST_F(UnsynchronizedWrite, LargeInputTest2) {
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+TYPED_TEST(UnsynchronizedWrite, LargeInputTest2) {
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t dataLen = 4096;
-    ASSERT_GT(dataLen, mNumMessagesMax);
+    ASSERT_GT(dataLen, this->mNumMessagesMax);
     std::vector<uint8_t> data(dataLen);
     initData(&data[0], dataLen);
-    ASSERT_FALSE(mQueue->write(&data[0], dataLen));
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_FALSE(mQueue->read(&readData[0], mNumMessagesMax));
+    ASSERT_FALSE(this->mQueue->write(&data[0], dataLen));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_FALSE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_NE(data, readData);
-    ASSERT_EQ(0UL, mQueue->availableToRead());
+    ASSERT_EQ(0UL, this->mQueue->availableToRead());
 }
 
 /*
@@ -742,29 +761,29 @@ TEST_F(UnsynchronizedWrite, LargeInputTest2) {
  * the attempt is succesful. Verify that the read fails
  * as expected.
  */
-TEST_F(UnsynchronizedWrite, LargeInputTest3) {
-    std::vector<uint8_t> data(mNumMessagesMax);
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    ASSERT_TRUE(mQueue->write(&data[0], 1));
-    std::vector<uint8_t> readData(mNumMessagesMax);
-    ASSERT_FALSE(mQueue->read(&readData[0], mNumMessagesMax));
+TYPED_TEST(UnsynchronizedWrite, LargeInputTest3) {
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    ASSERT_TRUE(this->mQueue->write(&data[0], 1));
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
+    ASSERT_FALSE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
 }
 
 /*
  * Verify that multiple reads one after the other return expected data.
  */
-TEST_F(UnsynchronizedWrite, MultipleRead) {
+TYPED_TEST(UnsynchronizedWrite, MultipleRead) {
     const size_t chunkSize = 100;
     const size_t chunkNum = 5;
     const size_t dataLen = chunkSize * chunkNum;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
     initData(data, dataLen);
-    ASSERT_TRUE(mQueue->write(data, dataLen));
+    ASSERT_TRUE(this->mQueue->write(data, dataLen));
     uint8_t readData[dataLen] = {};
     for (size_t i = 0; i < chunkNum; i++) {
-        ASSERT_TRUE(mQueue->read(readData + i * chunkSize, chunkSize));
+        ASSERT_TRUE(this->mQueue->read(readData + i * chunkSize, chunkSize));
     }
     ASSERT_EQ(0, memcmp(readData, data, dataLen));
 }
@@ -772,20 +791,20 @@ TEST_F(UnsynchronizedWrite, MultipleRead) {
 /*
  * Verify that multiple writes one after the other happens correctly.
  */
-TEST_F(UnsynchronizedWrite, MultipleWrite) {
+TYPED_TEST(UnsynchronizedWrite, MultipleWrite) {
     const size_t chunkSize = 100;
     const size_t chunkNum = 5;
     const size_t dataLen = chunkSize * chunkNum;
-    ASSERT_LE(dataLen, mNumMessagesMax);
+    ASSERT_LE(dataLen, this->mNumMessagesMax);
     uint8_t data[dataLen];
 
     initData(data, dataLen);
     for (size_t i = 0; i < chunkNum; i++) {
-        ASSERT_TRUE(mQueue->write(data + i * chunkSize, chunkSize));
+        ASSERT_TRUE(this->mQueue->write(data + i * chunkSize, chunkSize));
     }
 
     uint8_t readData[dataLen] = {};
-    ASSERT_TRUE(mQueue->read(readData, dataLen));
+    ASSERT_TRUE(this->mQueue->read(readData, dataLen));
     ASSERT_EQ(0, memcmp(readData, data, dataLen));
 }
 
@@ -795,15 +814,15 @@ TEST_F(UnsynchronizedWrite, MultipleWrite) {
  * Write mNumMessagesMax messages into the queue. This will cause a
  * wrap around. Read and verify the data.
  */
-TEST_F(UnsynchronizedWrite, ReadWriteWrapAround) {
-    size_t numMessages = mNumMessagesMax - 1;
-    std::vector<uint8_t> data(mNumMessagesMax);
-    std::vector<uint8_t> readData(mNumMessagesMax);
+TYPED_TEST(UnsynchronizedWrite, ReadWriteWrapAround) {
+    size_t numMessages = this->mNumMessagesMax - 1;
+    std::vector<uint8_t> data(this->mNumMessagesMax);
+    std::vector<uint8_t> readData(this->mNumMessagesMax);
 
-    initData(&data[0], mNumMessagesMax);
-    ASSERT_TRUE(mQueue->write(&data[0], numMessages));
-    ASSERT_TRUE(mQueue->read(&readData[0], numMessages));
-    ASSERT_TRUE(mQueue->write(&data[0], mNumMessagesMax));
-    ASSERT_TRUE(mQueue->read(&readData[0], mNumMessagesMax));
+    initData(&data[0], this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(&data[0], numMessages));
+    ASSERT_TRUE(this->mQueue->read(&readData[0], numMessages));
+    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    ASSERT_TRUE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     ASSERT_EQ(data, readData);
 }
