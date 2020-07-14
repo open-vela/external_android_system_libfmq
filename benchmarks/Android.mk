@@ -31,7 +31,7 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_REQUIRED_MODULES := android.hardware.tests.msgq@1.0-impl
 
 ifneq ($(TARGET_2ND_ARCH),)
-LOCAL_REQUIRED_MODULES += android.hardware.tests.msgq@1.0-impl$(TARGET_2ND_ARCH_MODULE_SUFFIX)
+LOCAL_REQUIRED_MODULES += android.hardware.tests.msgq@1.0-impl:32
 endif
 
 LOCAL_SHARED_LIBRARIES += android.hardware.tests.msgq@1.0 libfmq
