@@ -20,20 +20,16 @@ LOCAL_MODULE := fmq_test
 LOCAL_MODULE_CLASS := NATIVE_TESTS
 LOCAL_SRC_FILES := fmq_test
 LOCAL_REQUIRED_MODULES :=                           \
-    mq_test_client                                  \
     android.hardware.tests.msgq@1.0-service-test    \
+    mq_test_client                                  \
     hidl_test_helper
 
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/nativetest64
 
 ifneq ($(TARGET_2ND_ARCH),)
-LOCAL_REQUIRED_MODULES += android.hardware.tests.msgq@1.0-service-test$(TARGET_2ND_ARCH_MODULE_SUFFIX)
-LOCAL_REQUIRED_MODULES += mq_test_client$(TARGET_2ND_ARCH_MODULE_SUFFIX)
+LOCAL_REQUIRED_MODULES += \
+    android.hardware.tests.msgq@1.0-service-test:32 \
+    mq_test_client:32
 endif
 
 include $(BUILD_PREBUILT)
-
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := VtsFmqUnitTests
--include test/vts/tools/build/Android.host_config.mk
