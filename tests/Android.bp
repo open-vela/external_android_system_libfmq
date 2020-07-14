@@ -42,9 +42,9 @@ cc_test {
 }
 
 cc_test {
-    name: "mq_test",
+    name: "fmq_unit_tests",
 
-    srcs: ["mq_test.cpp"],
+    srcs: ["fmq_unit_tests.cpp"],
     shared_libs: [
         "libbase",
         "libcutils",
@@ -58,4 +58,10 @@ cc_test {
         "-Wall",
         "-Werror",
     ],
+    test_suites: ["general-tests"],
+    auto_gen_config: true,
+}
+
+vts_config {
+    name: "VtsFmqUnitTests",
 }
