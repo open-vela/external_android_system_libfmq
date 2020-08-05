@@ -268,6 +268,28 @@ TEST_F(AidlOnlyBadQueueConfig, NegativeAidlDescriptorGrantor) {
      */
     ASSERT_FALSE(fmq->isValid());
 }
+
+/*
+ * Test creating a new queue from a modified MQDescriptor of another queue.
+ * If MQDescriptor.quantum doesn't match the size of the payload(T), the queue
+ * should be invalid.
+ */
+TEST_F(AidlOnlyBadQueueConfig, MismatchedPayloadSize) {
+    AidlMessageQueueSync16 fmq = AidlMessageQueueSync16(64);
+    aidl::android::hardware::common::MQDescriptor<uint16_t, SynchronizedReadWrite> desc =
+            fmq.dupeDesc();
+    // This should work fine with the unmodified MQDescriptor
+    AidlMessageQueueSync16 fmq2 = AidlMessageQueueSync16(desc);
+    ASSERT_TRUE(fmq2.isValid());
+
+    // Simulate a difference in payload size between processes handling the queue
+    desc.quantum = 8;
+    AidlMessageQueueSync16 fmq3 = AidlMessageQueueSync16(desc);
+
+    // Should fail due to the quantum not matching the sizeof(uint16_t)
+    ASSERT_FALSE(fmq3.isValid());
+}
+
 /*
  * Test that basic blocking works. This test uses the non-blocking read()/write()
  * APIs.
