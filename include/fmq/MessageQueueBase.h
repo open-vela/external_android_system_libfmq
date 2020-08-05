@@ -563,10 +563,16 @@ void MessageQueueBase<MQDescriptorType, T, flavor>::initMemory(bool resetPointer
      * the native_handle is valid and T matches quantum size.
      */
     if ((mDesc == nullptr) || !mDesc->isHandleValid() ||
-        (mDesc->countGrantors() < hardware::details::kMinGrantorCount) ||
-        (mDesc->getQuantum() != sizeof(T))) {
+        (mDesc->countGrantors() < hardware::details::kMinGrantorCount)) {
         return;
     }
+    if (mDesc->getQuantum() != sizeof(T)) {
+        hardware::details::logError(
+                "Payload size differs between the queue instantiation and the "
+                "MQDescriptor.");
+        return;
+    }
+
     const auto& grantors = mDesc->grantors();
     for (const auto& grantor : grantors) {
         if (hardware::details::isAlignedToWordBoundary(grantor.offset) == false) {
