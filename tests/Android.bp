@@ -22,6 +22,9 @@ cc_test {
         "-Wall",
         "-Werror",
     ],
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
 
     shared_libs: [
         "libbase",
@@ -69,6 +72,9 @@ cc_test {
         "-Wall",
         "-Werror",
     ],
+    sanitize: {
+        misc_undefined: ["integer"],
+    },
     test_suites: ["general-tests"],
     auto_gen_config: true,
 }
