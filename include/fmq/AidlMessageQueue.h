@@ -22,11 +22,11 @@
 #include <fmq/MessageQueueBase.h>
 #include <utils/Log.h>
 
+namespace android {
+
 using aidl::android::hardware::common::MQDescriptor;
 using android::details::AidlMQDescriptorShim;
 using android::hardware::MQFlavor;
-
-namespace android {
 
 typedef uint64_t RingBufferPosition;
 
@@ -77,10 +77,16 @@ template <typename T, MQFlavor flavor>
 MQDescriptor AidlMessageQueue<T, flavor>::dupeDesc() {
     auto* shim = MessageQueueBase<AidlMQDescriptorShim, T, flavor>::getDesc();
     if (shim) {
+        std::vector<aidl::android::hardware::common::GrantorDescriptor> grantors;
+        for (const auto& grantor : shim->grantors()) {
+            grantors.push_back(aidl::android::hardware::common::GrantorDescriptor{
+                    .offset = static_cast<int32_t>(grantor.offset),
+                    .extent = static_cast<int64_t>(grantor.extent)});
+        }
         return MQDescriptor{
                 .quantum = static_cast<int32_t>(shim->getQuantum()),
-                .grantors = shim->grantors(),
-                .flags = shim->getFlags(),
+                .grantors = grantors,
+                .flags = static_cast<int32_t>(shim->getFlags()),
                 .fileDescriptor = ndk::ScopedFileDescriptor(dup(shim->handle()->data[0])),
         };
     } else {
