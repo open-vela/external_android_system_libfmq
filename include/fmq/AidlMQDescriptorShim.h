@@ -17,13 +17,19 @@
 #include <aidl/android/hardware/common/MQDescriptor.h>
 #include <cutils/native_handle.h>
 #include <fmq/MQDescriptorBase.h>
+#include <limits>
+
+namespace android {
+namespace hardware {
+namespace details {
+void logError(const std::string& message);
+}  // namespace details
+}  // namespace hardware
+namespace details {
 
 using aidl::android::hardware::common::GrantorDescriptor;
 using aidl::android::hardware::common::MQDescriptor;
 using android::hardware::MQFlavor;
-
-namespace android {
-namespace details {
 
 template <typename T, MQFlavor flavor>
 struct AidlMQDescriptorShim {
@@ -46,12 +52,14 @@ struct AidlMQDescriptorShim {
 
     size_t getQuantum() const;
 
-    int32_t getFlags() const;
+    uint32_t getFlags() const;
 
     bool isHandleValid() const { return mHandle != nullptr; }
     size_t countGrantors() const { return mGrantors.size(); }
 
-    inline const std::vector<GrantorDescriptor>& grantors() const { return mGrantors; }
+    inline const std::vector<android::hardware::GrantorDescriptor>& grantors() const {
+        return mGrantors;
+    }
 
     inline const ::native_handle_t* handle() const { return mHandle; }
 
@@ -61,22 +69,46 @@ struct AidlMQDescriptorShim {
     static const size_t kOffsetOfHandle;
 
   private:
-    std::vector<GrantorDescriptor> mGrantors;
+    std::vector<android::hardware::GrantorDescriptor> mGrantors;
     native_handle_t* mHandle = nullptr;
-    int32_t mQuantum = 0;
-    int32_t mFlags = 0;
+    uint32_t mQuantum = 0;
+    uint32_t mFlags = 0;
 };
 
 template <typename T, MQFlavor flavor>
 AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(const MQDescriptor& desc)
     : mQuantum(desc.quantum), mFlags(desc.flags) {
-    mHandle = native_handle_create(1 /* num fds */, 0 /* num ints */);
-    mHandle->data[0] = dup(desc.fileDescriptor.get());
+    if (desc.quantum < 0 || desc.flags < 0) {
+        // MQDescriptor uses signed integers, but the values must be positive.
+        hardware::details::logError("Invalid MQDescriptor. Values must be positive. quantum: " +
+                                    std::to_string(desc.quantum) +
+                                    ". flags: " + std::to_string(desc.flags));
+        return;
+    }
 
     mGrantors.resize(desc.grantors.size());
     for (size_t i = 0; i < desc.grantors.size(); ++i) {
-        mGrantors[i] = desc.grantors[i];
+        if (desc.grantors[i].offset < 0 || desc.grantors[i].extent < 0) {
+            // GrantorDescriptor uses signed integers, but the values must be positive.
+            // Return before setting up the native_handle to make this invalid.
+            hardware::details::logError(
+                    "Invalid MQDescriptor grantors. Values must be positive. Grantor index: " +
+                    std::to_string(i) + ". offset: " + std::to_string(desc.grantors[i].offset) +
+                    ". extent: " + std::to_string(desc.grantors[i].extent));
+            return;
+        }
+        mGrantors[i].flags = 0;
+        mGrantors[i].fdIndex = 0;
+        mGrantors[i].offset = desc.grantors[i].offset;
+        mGrantors[i].extent = desc.grantors[i].extent;
     }
+
+    mHandle = native_handle_create(1 /* num fds */, 0 /* num ints */);
+    if (mHandle == nullptr) {
+        hardware::details::logError("Null native_handle_t");
+        return;
+    }
+    mHandle->data[0] = dup(desc.fileDescriptor.get());
 }
 
 template <typename T, MQFlavor flavor>
@@ -108,6 +140,26 @@ AidlMQDescriptorShim<T, flavor>& AidlMQDescriptorShim<T, flavor>::operator=(
 template <typename T, MQFlavor flavor>
 AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(size_t bufferSize, native_handle_t* nHandle,
                                                       size_t messageSize, bool configureEventFlag) {
+    /*
+     * TODO(b/165674950) Since AIDL does not support unsigned integers, it can only support
+     * The offset of EventFlag word needs to fit into an int32_t in MQDescriptor. This word comes
+     * after the readPtr, writePtr, and dataBuffer.
+     */
+    bool overflow = bufferSize > std::numeric_limits<uint64_t>::max() -
+                                         (sizeof(hardware::details::RingBufferPosition) +
+                                          sizeof(hardware::details::RingBufferPosition));
+    uint64_t largestOffset = hardware::details::alignToWordBoundary(
+            sizeof(hardware::details::RingBufferPosition) +
+            sizeof(hardware::details::RingBufferPosition) + bufferSize);
+    if (overflow || largestOffset > std::numeric_limits<int32_t>::max() ||
+        messageSize > std::numeric_limits<int32_t>::max()) {
+        hardware::details::logError(
+                "Queue size is too large. Message size: " + std::to_string(messageSize) +
+                " bytes. Data buffer size: " + std::to_string(bufferSize) + " bytes. Max size: " +
+                std::to_string(std::numeric_limits<int32_t>::max()) + " bytes.");
+        return;
+    }
+
     mHandle = nHandle;
     mQuantum = messageSize;
     mFlags = flavor;
@@ -137,8 +189,8 @@ AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(size_t bufferSize, native_
          offset += memSize[grantorPos++]) {
         mGrantors[grantorPos] = {
                 0 /* grantor flags */, 0 /* fdIndex */,
-                static_cast<int32_t>(hardware::details::alignToWordBoundary(offset)),
-                static_cast<int64_t>(memSize[grantorPos])};
+                static_cast<uint32_t>(hardware::details::alignToWordBoundary(offset)),
+                memSize[grantorPos]};
     }
 }
 
@@ -161,7 +213,7 @@ size_t AidlMQDescriptorShim<T, flavor>::getQuantum() const {
 }
 
 template <typename T, MQFlavor flavor>
-int32_t AidlMQDescriptorShim<T, flavor>::getFlags() const {
+uint32_t AidlMQDescriptorShim<T, flavor>::getFlags() const {
     return mFlags;
 }
 
