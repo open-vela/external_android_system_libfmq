@@ -36,6 +36,20 @@ enum MQFlavor : uint32_t {
     kUnsynchronizedWrite = 0x02
 };
 
+struct GrantorDescriptor {
+    uint32_t flags __attribute__((aligned(4)));
+    uint32_t fdIndex __attribute__((aligned(4)));
+    uint32_t offset __attribute__((aligned(4)));
+    uint64_t extent __attribute__((aligned(8)));
+};
+
+static_assert(offsetof(GrantorDescriptor, flags) == 0, "wrong offset");
+static_assert(offsetof(GrantorDescriptor, fdIndex) == 4, "wrong offset");
+static_assert(offsetof(GrantorDescriptor, offset) == 8, "wrong offset");
+static_assert(offsetof(GrantorDescriptor, extent) == 16, "wrong offset");
+static_assert(sizeof(GrantorDescriptor) == 24, "wrong size");
+static_assert(__alignof(GrantorDescriptor) == 8, "wrong alignment");
+
 namespace details {
 
 typedef uint64_t RingBufferPosition;
