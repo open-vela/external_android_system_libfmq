@@ -151,6 +151,8 @@ TYPED_TEST_CASE(BadQueueConfig, BadConfigTypes);
 template <typename T>
 class BadQueueConfig : public TestBase<T> {};
 
+class AidlOnlyBadQueueConfig : public ::testing::Test {};
+
 /*
  * Utility function to initialize data to be written to the FMQ
  */
@@ -227,6 +229,43 @@ TYPED_TEST(BadQueueConfig, QueueSizeTooLarge) {
     ASSERT_FALSE(fmq->isValid());
 }
 
+// TODO(b/165674950) Since AIDL does not support unsigned integers, it can only support
+// 1/2 the queue size of HIDL. Once support is added to AIDL, this restriction can be
+// lifted. Until then, check against SSIZE_MAX instead of SIZE_MAX.
+TEST_F(AidlOnlyBadQueueConfig, QueueSizeTooLargeForAidl) {
+    size_t numElementsInQueue = SSIZE_MAX / sizeof(uint16_t) + 1;
+    AidlMessageQueueSync16* fmq = new (std::nothrow) AidlMessageQueueSync16(numElementsInQueue);
+    ASSERT_NE(nullptr, fmq);
+    /*
+     * Should fail due to size being too large to fit into size_t.
+     */
+    ASSERT_FALSE(fmq->isValid());
+}
+
+TEST_F(AidlOnlyBadQueueConfig, NegativeAidlDescriptor) {
+    aidl::android::hardware::common::MQDescriptor desc;
+    desc.quantum = -10;
+    AidlMessageQueueSync16* fmq = new (std::nothrow) AidlMessageQueueSync16(desc);
+    ASSERT_NE(nullptr, fmq);
+    /*
+     * Should fail due to quantum being negative.
+     */
+    ASSERT_FALSE(fmq->isValid());
+}
+
+TEST_F(AidlOnlyBadQueueConfig, NegativeAidlDescriptorGrantor) {
+    aidl::android::hardware::common::MQDescriptor desc;
+    desc.quantum = 2;
+    desc.flags = 0;
+    desc.grantors.push_back(
+            aidl::android::hardware::common::GrantorDescriptor{.offset = 12, .extent = -10});
+    AidlMessageQueueSync16* fmq = new (std::nothrow) AidlMessageQueueSync16(desc);
+    ASSERT_NE(nullptr, fmq);
+    /*
+     * Should fail due to grantor having negative extent.
+     */
+    ASSERT_FALSE(fmq->isValid());
+}
 /*
  * Test that basic blocking works. This test uses the non-blocking read()/write()
  * APIs.
