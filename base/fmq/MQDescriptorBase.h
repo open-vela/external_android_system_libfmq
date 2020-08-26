@@ -53,8 +53,6 @@ static_assert(__alignof(GrantorDescriptor) == 8, "wrong alignment");
 
 namespace details {
 
-void check(bool exp);
-
 void logError(const std::string& message);
 
 typedef uint64_t RingBufferPosition;

@@ -584,12 +584,19 @@ void MessageQueueBase<MQDescriptorType, T, flavor>::initMemory(bool resetPointer
          */
         mReadPtr = new (std::nothrow) std::atomic<uint64_t>;
     }
-
-    hardware::details::check(mReadPtr != nullptr);
+    if (mReadPtr == nullptr) {
+#ifdef __BIONIC__
+        __assert(__FILE__, __LINE__, "mReadPtr is null");
+#endif
+    }
 
     mWritePtr = reinterpret_cast<std::atomic<uint64_t>*>(
             mapGrantorDescr(hardware::details::WRITEPTRPOS));
-    hardware::details::check(mWritePtr != nullptr);
+    if (mWritePtr == nullptr) {
+#ifdef __BIONIC__
+        __assert(__FILE__, __LINE__, "mWritePtr is null");
+#endif
+    }
 
     if (resetPointers) {
         mReadPtr->store(0, std::memory_order_release);
@@ -600,7 +607,11 @@ void MessageQueueBase<MQDescriptorType, T, flavor>::initMemory(bool resetPointer
     }
 
     mRing = reinterpret_cast<uint8_t*>(mapGrantorDescr(hardware::details::DATAPTRPOS));
-    hardware::details::check(mRing != nullptr);
+    if (mRing == nullptr) {
+#ifdef __BIONIC__
+        __assert(__FILE__, __LINE__, "mRing is null");
+#endif
+    }
 
     mEvFlagWord =
             static_cast<std::atomic<uint32_t>*>(mapGrantorDescr(hardware::details::EVFLAGWORDPOS));
