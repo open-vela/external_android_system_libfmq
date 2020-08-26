@@ -30,6 +30,13 @@ using android::hardware::MQFlavor;
 
 namespace android {
 
+namespace hardware {
+namespace details {
+void check(bool exp);
+void logError(const std::string& message);
+}  // namespace details
+}  // namespace hardware
+
 template <template <typename, MQFlavor> class MQDescriptorType, typename T, MQFlavor flavor>
 struct MessageQueueBase {
     typedef MQDescriptorType<T, flavor> Descriptor;
