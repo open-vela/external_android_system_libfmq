@@ -20,6 +20,11 @@
 #include <limits>
 
 namespace android {
+namespace hardware {
+namespace details {
+void logError(const std::string& message);
+}  // namespace details
+}  // namespace hardware
 namespace details {
 
 using aidl::android::hardware::common::GrantorDescriptor;
