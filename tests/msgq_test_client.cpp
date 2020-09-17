@@ -54,6 +54,7 @@ typedef android::AidlMessageQueue<uint16_t, kUnsynchronizedWrite> AidlMessageQue
 typedef android::hardware::MessageQueue<uint16_t, kSynchronizedReadWrite> MessageQueueSync;
 typedef android::hardware::MessageQueue<uint16_t, kUnsynchronizedWrite> MessageQueueUnsync;
 static const std::string kServiceName = "BnTestAidlMsgQ";
+static constexpr size_t kNumElementsInSyncQueue = 1024;
 
 // Run everything on both the AIDL and HIDL versions
 typedef ::testing::Types<AidlMessageQueueSync, MessageQueueSync> SyncTypes;
@@ -226,22 +227,21 @@ class SynchronizedReadWriteClient : public ClientSyncTestBase<T> {
     }
 
     virtual void SetUp() {
-        static constexpr size_t kNumElementsInQueue = 1024;
         this->mService = this->waitGetTestService();
         ASSERT_NE(this->mService, nullptr);
         ASSERT_TRUE(this->mService->isRemote());
         // create a queue on the client side
-        mQueue = new (std::nothrow) T(kNumElementsInQueue, true /* configure event flag word */);
+        mQueue =
+                new (std::nothrow) T(kNumElementsInSyncQueue, true /* configure event flag word */);
         ASSERT_NE(nullptr, mQueue);
         ASSERT_TRUE(mQueue->isValid());
-        mNumMessagesMax = mQueue->getQuantumCount();
+        ASSERT_EQ(mQueue->getQuantumCount(), kNumElementsInSyncQueue);
 
         // tell server to set up the queue on its end
         ASSERT_TRUE(this->configureFmqSyncReadWrite(mQueue));
     }
 
     T* mQueue = nullptr;
-    size_t mNumMessagesMax = 0;
 };
 
 TYPED_TEST_CASE(UnsynchronizedWriteClient, UnsyncTypes);
@@ -372,23 +372,30 @@ TYPED_TEST(UnsynchronizedWriteClientMultiProcess, MultipleReadersAfterOverflow) 
  */
 TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWrite1) {
     const size_t dataLen = 64;
-    uint16_t data[dataLen] = {0};
+    bool ret = false;
     /*
      * Request service to perform a blocking read. This call is oneway and will
      * return immediately.
      */
     this->mService->requestBlockingRead(dataLen);
-    bool ret = this->mQueue->writeBlocking(
-            data, dataLen, static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-            5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
-    ret = this->mQueue->writeBlocking(
-            data, this->mNumMessagesMax,
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-            5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
+    {
+        std::array<uint16_t, dataLen> data = {0};
+        ret = this->mQueue->writeBlocking(
+                data.data(), data.size(),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                5000000000 /* timeOutNanos */);
+        ASSERT_TRUE(ret);
+    }
+    {
+        std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
+        ret = this->mQueue->writeBlocking(
+                data.data(), data.size(),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                5000000000 /* timeOutNanos */);
+        ASSERT_TRUE(ret);
+    }
 }
 
 /*
@@ -398,7 +405,7 @@ TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWrite1) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWrite2) {
     const size_t dataLen = 64;
-    std::vector<uint16_t> data(this->mNumMessagesMax);
+    bool ret = false;
 
     /*
      * Request service to perform a blocking read using default EventFlag
@@ -409,17 +416,21 @@ TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWrite2) {
 
     /* Cause a context switch to allow service to block */
     sched_yield();
-
-    bool ret = this->mQueue->writeBlocking(&data[0], dataLen);
-    ASSERT_TRUE(ret);
+    {
+        std::array<uint16_t, dataLen> data = {0};
+        ret = this->mQueue->writeBlocking(data.data(), data.size());
+        ASSERT_TRUE(ret);
+    }
 
     /*
      * If the blocking read was successful, another write of size
-     * this->mNumMessagesMax will succeed.
+     * kNumElementsInSyncQueue will succeed.
      */
-    ret = this->mQueue->writeBlocking(&data[0], this->mNumMessagesMax,
-                                      5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
+    {
+        std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
+        ret = this->mQueue->writeBlocking(data.data(), data.size(), 5000000000 /* timeOutNanos */);
+        ASSERT_TRUE(ret);
+    }
 }
 
 /*
@@ -430,31 +441,42 @@ TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWrite2) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWriteRepeat1) {
     const size_t dataLen = 64;
-    uint16_t data[dataLen] = {0};
     bool ret = false;
 
     /*
-     * Request service to perform a blocking read. This call is oneway and will
-     * return immediately.
+     * Request service to perform a blocking read of 64 elements. This call is
+     * oneway and will return immediately.
      */
-    const size_t writeCount = 1024;
+    const size_t writeCount = kNumElementsInSyncQueue;
     this->mService->requestBlockingReadRepeat(dataLen, writeCount);
-
-    for (size_t i = 0; i < writeCount; i++) {
+    /*
+     * Write 64 elements into the queue for the service to consume
+     */
+    {
+        std::array<uint16_t, dataLen> data = {0};
+        for (size_t i = 0; i < writeCount; i++) {
+            ret = this->mQueue->writeBlocking(
+                    data.data(), data.size(),
+                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                    5000000000 /* timeOutNanos */);
+            ASSERT_TRUE(ret);
+        }
+    }
+    /*
+     * The queue should be totally empty now, so filling it up entirely with one
+     * blocking write should be successful.
+     */
+    {
+        std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
         ret = this->mQueue->writeBlocking(
-                data, dataLen, static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                data.data(), data.size(),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
                 static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
                 5000000000 /* timeOutNanos */);
+
         ASSERT_TRUE(ret);
     }
-
-    ret = this->mQueue->writeBlocking(
-            data, this->mNumMessagesMax,
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-            5000000000 /* timeOutNanos */);
-
-    ASSERT_TRUE(ret);
 }
 
 /*
@@ -465,29 +487,41 @@ TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWriteRepeat1) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWriteRepeat2) {
     const size_t dataLen = 64;
-    uint16_t data[dataLen] = {0};
     bool ret = false;
     /*
-     * Request service to perform a blocking read. This call is oneway and will
-     * return immediately.
+     * Request service to perform a repeated blocking read. This call is oneway
+     * and will return immediately. It will read 64 * 2 elements with each
+     * blocking read, for a total of writeCount / 2 calls.
      */
-    const size_t writeCount = 1024;
+    const size_t writeCount = kNumElementsInSyncQueue;
     this->mService->requestBlockingReadRepeat(dataLen * 2, writeCount / 2);
-
-    for (size_t i = 0; i < writeCount; i++) {
+    /*
+     * Write 64 elements into the queue writeCount times
+     */
+    {
+        std::array<uint16_t, dataLen> data = {0};
+        for (size_t i = 0; i < writeCount; i++) {
+            ret = this->mQueue->writeBlocking(
+                    data.data(), data.size(),
+                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                    5000000000 /* timeOutNanos */);
+            ASSERT_TRUE(ret);
+        }
+    }
+    /*
+     * The queue should be totally empty now, so filling it up entirely with one
+     * blocking write should be successful.
+     */
+    {
+        std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
         ret = this->mQueue->writeBlocking(
-                data, dataLen, static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                data.data(), data.size(),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
                 static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
                 5000000000 /* timeOutNanos */);
         ASSERT_TRUE(ret);
     }
-
-    ret = this->mQueue->writeBlocking(
-            data, this->mNumMessagesMax,
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-            5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
 }
 
 /*
@@ -497,29 +531,42 @@ TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWriteRepeat2) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWriteRepeat3) {
     const size_t dataLen = 64;
-    uint16_t data[dataLen] = {0};
     bool ret = false;
 
     /*
-     * Request service to perform a blocking read. This call is oneway and will
-     * return immediately.
+     * Request service to perform a repeated blocking read. This call is oneway
+     * and will return immediately. It will read 64 / 2 elements with each
+     * blocking read, for a total of writeCount * 2 calls.
      */
     size_t writeCount = 1024;
     this->mService->requestBlockingReadRepeat(dataLen / 2, writeCount * 2);
-
-    for (size_t i = 0; i < writeCount; i++) {
+    /*
+     * Write 64 elements into the queue writeCount times
+     */
+    {
+        std::array<uint16_t, dataLen> data = {0};
+        for (size_t i = 0; i < writeCount; i++) {
+            ret = this->mQueue->writeBlocking(
+                    data.data(), data.size(),
+                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                    static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
+                    5000000000 /* timeOutNanos */);
+            ASSERT_TRUE(ret);
+        }
+    }
+    /*
+     * The queue should be totally empty now, so filling it up entirely with one
+     * blocking write should be successful.
+     */
+    {
+        std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
         ret = this->mQueue->writeBlocking(
-                data, dataLen, static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
+                data.data(), data.size(),
+                static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
                 static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
                 5000000000 /* timeOutNanos */);
         ASSERT_TRUE(ret);
     }
-    ret = this->mQueue->writeBlocking(
-            data, this->mNumMessagesMax,
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_FULL),
-            static_cast<uint32_t>(ITestMsgQ::EventFlagBits::FMQ_NOT_EMPTY),
-            5000000000 /* timeOutNanos */);
-    ASSERT_TRUE(ret);
 }
 
 /*
@@ -552,7 +599,7 @@ TYPED_TEST(SynchronizedReadWriteClient, BlockingReadWriteZeroMessages) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, SmallInputReaderTest1) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, this->mNumMessagesMax);
+    ASSERT_LE(dataLen, kNumElementsInSyncQueue);
     bool ret = this->requestWriteFmqSync(dataLen);
     ASSERT_TRUE(ret);
     uint16_t readData[dataLen] = {};
@@ -567,7 +614,7 @@ TYPED_TEST(SynchronizedReadWriteClient, SmallInputReaderTest1) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, SmallInputReaderTest2) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, this->mNumMessagesMax);
+    ASSERT_LE(dataLen, kNumElementsInSyncQueue);
     auto ret = this->requestWriteFmqSync(dataLen);
 
     // ASSERT_TRUE(ret.isOk());
@@ -597,7 +644,7 @@ TYPED_TEST(SynchronizedReadWriteClient, SmallInputReaderTest2) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, SmallInputWriterTest1) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, this->mNumMessagesMax);
+    ASSERT_LE(dataLen, kNumElementsInSyncQueue);
     size_t originalCount = this->mQueue->availableToWrite();
     uint16_t data[dataLen];
     initData(data, dataLen);
@@ -614,7 +661,7 @@ TYPED_TEST(SynchronizedReadWriteClient, SmallInputWriterTest1) {
  */
 TYPED_TEST(SynchronizedReadWriteClient, SmallInputWriterTest2) {
     const size_t dataLen = 16;
-    ASSERT_LE(dataLen, this->mNumMessagesMax);
+    ASSERT_LE(dataLen, kNumElementsInSyncQueue);
     size_t originalCount = this->mQueue->availableToWrite();
     uint16_t data[dataLen];
     initData(data, dataLen);
@@ -652,7 +699,7 @@ TYPED_TEST(SynchronizedReadWriteClient, SmallInputWriterTest2) {
 TYPED_TEST(SynchronizedReadWriteClient, ReadWhenEmpty) {
     ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t numMessages = 2;
-    ASSERT_LE(numMessages, this->mNumMessagesMax);
+    ASSERT_LE(numMessages, kNumElementsInSyncQueue);
     uint16_t readData[numMessages];
     ASSERT_FALSE(this->mQueue->read(readData, numMessages));
 }
@@ -667,12 +714,12 @@ TYPED_TEST(SynchronizedReadWriteClient, ReadWhenEmpty) {
  */
 
 TYPED_TEST(SynchronizedReadWriteClient, WriteWhenFull) {
-    std::vector<uint16_t> data(this->mNumMessagesMax);
-    initData(&data[0], this->mNumMessagesMax);
-    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
+    initData(data.data(), data.size());
+    ASSERT_TRUE(this->mQueue->write(data.data(), data.size()));
     ASSERT_EQ(0UL, this->mQueue->availableToWrite());
     ASSERT_FALSE(this->mQueue->write(&data[0], 1));
-    bool ret = this->requestReadFmqSync(this->mNumMessagesMax);
+    bool ret = this->requestReadFmqSync(data.size());
     ASSERT_TRUE(ret);
 }
 
@@ -682,11 +729,11 @@ TYPED_TEST(SynchronizedReadWriteClient, WriteWhenFull) {
  * Read and verify data in mQueue.
  */
 TYPED_TEST(SynchronizedReadWriteClient, LargeInputTest1) {
-    bool ret = this->requestWriteFmqSync(this->mNumMessagesMax);
+    bool ret = this->requestWriteFmqSync(kNumElementsInSyncQueue);
     ASSERT_TRUE(ret);
-    std::vector<uint16_t> readData(this->mNumMessagesMax);
-    ASSERT_TRUE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
-    ASSERT_TRUE(verifyData(&readData[0], this->mNumMessagesMax));
+    std::vector<uint16_t> readData(kNumElementsInSyncQueue);
+    ASSERT_TRUE(this->mQueue->read(&readData[0], kNumElementsInSyncQueue));
+    ASSERT_TRUE(verifyData(&readData[0], kNumElementsInSyncQueue));
 }
 
 /*
@@ -697,7 +744,7 @@ TYPED_TEST(SynchronizedReadWriteClient, LargeInputTest1) {
 TYPED_TEST(SynchronizedReadWriteClient, LargeInputTest2) {
     ASSERT_EQ(0UL, this->mQueue->availableToRead());
     const size_t numMessages = 2048;
-    ASSERT_GT(numMessages, this->mNumMessagesMax);
+    ASSERT_GT(numMessages, kNumElementsInSyncQueue);
     bool ret = this->requestWriteFmqSync(numMessages);
     ASSERT_FALSE(ret);
     uint16_t readData;
@@ -714,13 +761,13 @@ TYPED_TEST(SynchronizedReadWriteClient, LargeInputTest2) {
  */
 
 TYPED_TEST(SynchronizedReadWriteClient, LargeInputTest3) {
-    std::vector<uint16_t> data(this->mNumMessagesMax);
-    initData(&data[0], this->mNumMessagesMax);
-    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
+    std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
+    initData(data.data(), data.size());
+    ASSERT_TRUE(this->mQueue->write(data.data(), data.size()));
     ASSERT_EQ(0UL, this->mQueue->availableToWrite());
-    ASSERT_FALSE(this->mQueue->write(&data[0], 1));
+    ASSERT_FALSE(this->mQueue->write(data.data(), 1));
 
-    bool ret = this->requestReadFmqSync(this->mNumMessagesMax);
+    bool ret = this->requestReadFmqSync(data.size());
     ASSERT_TRUE(ret);
 }
 
@@ -732,7 +779,7 @@ TYPED_TEST(SynchronizedReadWriteClient, MultipleRead) {
     const size_t chunkSize = 100;
     const size_t chunkNum = 5;
     const size_t numMessages = chunkSize * chunkNum;
-    ASSERT_LE(numMessages, this->mNumMessagesMax);
+    ASSERT_LE(numMessages, kNumElementsInSyncQueue);
     size_t availableToRead = this->mQueue->availableToRead();
     size_t expectedCount = 0;
     ASSERT_EQ(expectedCount, availableToRead);
@@ -753,7 +800,7 @@ TYPED_TEST(SynchronizedReadWriteClient, MultipleWrite) {
     const size_t chunkSize = 100;
     const size_t chunkNum = 5;
     const size_t numMessages = chunkSize * chunkNum;
-    ASSERT_LE(numMessages, this->mNumMessagesMax);
+    ASSERT_LE(numMessages, kNumElementsInSyncQueue);
     uint16_t data[numMessages];
     initData(&data[0], numMessages);
 
@@ -771,14 +818,14 @@ TYPED_TEST(SynchronizedReadWriteClient, MultipleWrite) {
  * wrap around. Request mService to read and verify the data.
  */
 TYPED_TEST(SynchronizedReadWriteClient, ReadWriteWrapAround) {
-    size_t numMessages = this->mNumMessagesMax / 2;
-    std::vector<uint16_t> data(this->mNumMessagesMax);
-    initData(&data[0], this->mNumMessagesMax);
+    size_t numMessages = kNumElementsInSyncQueue / 2;
+    std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
+    initData(data.data(), data.size());
     ASSERT_TRUE(this->mQueue->write(&data[0], numMessages));
     bool ret = this->requestReadFmqSync(numMessages);
     ASSERT_TRUE(ret);
-    ASSERT_TRUE(this->mQueue->write(&data[0], this->mNumMessagesMax));
-    ret = this->requestReadFmqSync(this->mNumMessagesMax);
+    ASSERT_TRUE(this->mQueue->write(data.data(), data.size()));
+    ret = this->requestReadFmqSync(data.size());
     ASSERT_TRUE(ret);
 }
 
@@ -791,9 +838,9 @@ TYPED_TEST(SynchronizedReadWriteClient, ReadWriteWrapAround) {
  * wrap around. Read and verify the data.
  */
 TYPED_TEST(SynchronizedReadWriteClient, ReadWriteWrapAround2) {
-    size_t numMessages = this->mNumMessagesMax / 2;
-    std::vector<uint16_t> data(this->mNumMessagesMax);
-    initData(&data[0], this->mNumMessagesMax);
+    size_t numMessages = kNumElementsInSyncQueue / 2;
+    std::array<uint16_t, kNumElementsInSyncQueue> data = {0};
+    initData(data.data(), data.size());
     ASSERT_TRUE(this->mQueue->write(&data[0], numMessages));
     auto ret = this->requestReadFmqSync(numMessages);
 
@@ -804,19 +851,18 @@ TYPED_TEST(SynchronizedReadWriteClient, ReadWriteWrapAround2) {
      * The next write and read will have to deal with with wrap arounds.
      */
     typename TypeParam::MemTransaction tx;
-    ASSERT_TRUE(this->mQueue->beginWrite(this->mNumMessagesMax, &tx));
+    ASSERT_TRUE(this->mQueue->beginWrite(data.size(), &tx));
 
-    ASSERT_EQ(tx.getFirstRegion().getLength() + tx.getSecondRegion().getLength(),
-              this->mNumMessagesMax);
+    ASSERT_EQ(tx.getFirstRegion().getLength() + tx.getSecondRegion().getLength(), data.size());
 
-    for (size_t i = 0; i < this->mNumMessagesMax; i++) {
+    for (size_t i = 0; i < data.size(); i++) {
         uint16_t* ptr = tx.getSlot(i);
         *ptr = data[i];
     }
 
-    ASSERT_TRUE(this->mQueue->commitWrite(this->mNumMessagesMax));
+    ASSERT_TRUE(this->mQueue->commitWrite(data.size()));
 
-    ret = this->requestReadFmqSync(this->mNumMessagesMax);
+    ret = this->requestReadFmqSync(data.size());
     ASSERT_TRUE(ret);
 }
 
