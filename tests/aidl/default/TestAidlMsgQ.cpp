@@ -22,8 +22,8 @@ namespace fmq {
 namespace test {
 
 // Methods from ::aidl::android::fmq::test::ITestAidlMsgQ follow.
-ndk::ScopedAStatus TestAidlMsgQ::configureFmqSyncReadWrite(
-        const MQDescriptor<int32_t, SynchronizedReadWrite>& mqDesc, bool* _aidl_return) {
+ndk::ScopedAStatus TestAidlMsgQ::configureFmqSyncReadWrite(const MQDescriptor& mqDesc,
+                                                           bool* _aidl_return) {
     mFmqSynchronized.reset(new (std::nothrow) TestAidlMsgQ::MessageQueueSync(mqDesc));
     if ((mFmqSynchronized == nullptr) || (mFmqSynchronized->isValid() == false)) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
@@ -39,8 +39,8 @@ ndk::ScopedAStatus TestAidlMsgQ::configureFmqSyncReadWrite(
     return ndk::ScopedAStatus::ok();
 }
 
-ndk::ScopedAStatus TestAidlMsgQ::getFmqUnsyncWrite(
-        bool configureFmq, MQDescriptor<int32_t, UnsynchronizedWrite>* mqDesc, bool* _aidl_return) {
+ndk::ScopedAStatus TestAidlMsgQ::getFmqUnsyncWrite(bool configureFmq, MQDescriptor* mqDesc,
+                                                   bool* _aidl_return) {
     if (configureFmq) {
         static constexpr size_t kNumElementsInQueue = 1024;
         mFmqUnsynchronized.reset(new (std::nothrow)
@@ -59,7 +59,7 @@ ndk::ScopedAStatus TestAidlMsgQ::getFmqUnsyncWrite(
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::requestBlockingRead(int32_t count) {
-    std::vector<int32_t> data(count);
+    std::vector<uint16_t> data(count);
     bool result = mFmqSynchronized->readBlocking(
             &data[0], count, static_cast<uint32_t>(EventFlagBits::FMQ_NOT_FULL),
             static_cast<uint32_t>(EventFlagBits::FMQ_NOT_EMPTY), 5000000000 /* timeOutNanos */);
@@ -71,7 +71,7 @@ ndk::ScopedAStatus TestAidlMsgQ::requestBlockingRead(int32_t count) {
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::requestBlockingReadDefaultEventFlagBits(int32_t count) {
-    std::vector<int32_t> data(count);
+    std::vector<uint16_t> data(count);
     bool result = mFmqSynchronized->readBlocking(&data[0], count);
 
     if (result == false) {
@@ -82,7 +82,7 @@ ndk::ScopedAStatus TestAidlMsgQ::requestBlockingReadDefaultEventFlagBits(int32_t
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::requestBlockingReadRepeat(int32_t count, int32_t numIter) {
-    std::vector<int32_t> data(count);
+    std::vector<uint16_t> data(count);
     for (int i = 0; i < numIter; i++) {
         bool result = mFmqSynchronized->readBlocking(
                 &data[0], count, static_cast<uint32_t>(EventFlagBits::FMQ_NOT_FULL),
@@ -98,21 +98,21 @@ ndk::ScopedAStatus TestAidlMsgQ::requestBlockingReadRepeat(int32_t count, int32_
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::requestReadFmqSync(int32_t count, bool* _aidl_return) {
-    std::vector<int32_t> data(count);
+    std::vector<uint16_t> data(count);
     bool result = mFmqSynchronized->read(&data[0], count) && verifyData(&data[0], count);
     *_aidl_return = result;
     return ndk::ScopedAStatus::ok();
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::requestReadFmqUnsync(int32_t count, bool* _aidl_return) {
-    std::vector<int32_t> data(count);
+    std::vector<uint16_t> data(count);
     bool result = mFmqUnsynchronized->read(&data[0], count) && verifyData(&data[0], count);
     *_aidl_return = result;
     return ndk::ScopedAStatus::ok();
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::requestWriteFmqSync(int32_t count, bool* _aidl_return) {
-    std::vector<int32_t> data(count);
+    std::vector<uint16_t> data(count);
     for (int i = 0; i < count; i++) {
         data[i] = i;
     }
@@ -122,7 +122,7 @@ ndk::ScopedAStatus TestAidlMsgQ::requestWriteFmqSync(int32_t count, bool* _aidl_
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::requestWriteFmqUnsync(int32_t count, bool* _aidl_return) {
-    std::vector<int32_t> data(count);
+    std::vector<uint16_t> data(count);
     for (int i = 0; i < count; i++) {
         data[i] = i;
     }
