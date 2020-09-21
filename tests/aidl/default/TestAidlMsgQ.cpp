@@ -22,8 +22,8 @@ namespace fmq {
 namespace test {
 
 // Methods from ::aidl::android::fmq::test::ITestAidlMsgQ follow.
-ndk::ScopedAStatus TestAidlMsgQ::configureFmqSyncReadWrite(
-        const MQDescriptor<int32_t, SynchronizedReadWrite>& mqDesc, bool* _aidl_return) {
+ndk::ScopedAStatus TestAidlMsgQ::configureFmqSyncReadWrite(const MQDescriptor& mqDesc,
+                                                           bool* _aidl_return) {
     mFmqSynchronized.reset(new (std::nothrow) TestAidlMsgQ::MessageQueueSync(mqDesc));
     if ((mFmqSynchronized == nullptr) || (mFmqSynchronized->isValid() == false)) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
@@ -39,8 +39,8 @@ ndk::ScopedAStatus TestAidlMsgQ::configureFmqSyncReadWrite(
     return ndk::ScopedAStatus::ok();
 }
 
-ndk::ScopedAStatus TestAidlMsgQ::getFmqUnsyncWrite(
-        bool configureFmq, MQDescriptor<int32_t, UnsynchronizedWrite>* mqDesc, bool* _aidl_return) {
+ndk::ScopedAStatus TestAidlMsgQ::getFmqUnsyncWrite(bool configureFmq, MQDescriptor* mqDesc,
+                                                   bool* _aidl_return) {
     if (configureFmq) {
         static constexpr size_t kNumElementsInQueue = 1024;
         mFmqUnsynchronized.reset(new (std::nothrow)
