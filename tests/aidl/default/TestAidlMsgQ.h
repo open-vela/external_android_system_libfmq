@@ -37,8 +37,8 @@ using ::android::hardware::MQFlavor;
 using ::android::AidlMessageQueue;
 
 struct TestAidlMsgQ : public BnTestAidlMsgQ {
-    typedef AidlMessageQueue<int32_t, kSynchronizedReadWrite> MessageQueueSync;
-    typedef AidlMessageQueue<int32_t, kUnsynchronizedWrite> MessageQueueUnsync;
+    typedef AidlMessageQueue<uint16_t, kSynchronizedReadWrite> MessageQueueSync;
+    typedef AidlMessageQueue<uint16_t, kUnsynchronizedWrite> MessageQueueUnsync;
 
     TestAidlMsgQ() : mFmqSynchronized(nullptr), mFmqUnsynchronized(nullptr) {}
 
@@ -62,7 +62,7 @@ struct TestAidlMsgQ : public BnTestAidlMsgQ {
     /*
      * Utility function to verify data read from the fast message queue.
      */
-    bool verifyData(int32_t* data, int count) {
+    bool verifyData(uint16_t* data, int count) {
         for (int i = 0; i < count; i++) {
             if (data[i] != i) return false;
         }
