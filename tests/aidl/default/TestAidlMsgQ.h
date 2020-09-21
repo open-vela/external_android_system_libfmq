@@ -30,6 +30,8 @@ using ::aidl::android::fmq::test::EventFlagBits;
 using ::aidl::android::fmq::test::ITestAidlMsgQ;
 
 using ::aidl::android::hardware::common::MQDescriptor;
+using ::aidl::android::hardware::common::SynchronizedReadWrite;
+using ::aidl::android::hardware::common::UnsynchronizedWrite;
 using ::android::hardware::kSynchronizedReadWrite;
 using ::android::hardware::kUnsynchronizedWrite;
 using ::android::hardware::MQFlavor;
@@ -37,15 +39,17 @@ using ::android::hardware::MQFlavor;
 using ::android::AidlMessageQueue;
 
 struct TestAidlMsgQ : public BnTestAidlMsgQ {
-    typedef AidlMessageQueue<int32_t, kSynchronizedReadWrite> MessageQueueSync;
-    typedef AidlMessageQueue<int32_t, kUnsynchronizedWrite> MessageQueueUnsync;
+    typedef AidlMessageQueue<int32_t, SynchronizedReadWrite> MessageQueueSync;
+    typedef AidlMessageQueue<int32_t, UnsynchronizedWrite> MessageQueueUnsync;
 
     TestAidlMsgQ() : mFmqSynchronized(nullptr), mFmqUnsynchronized(nullptr) {}
 
     // Methods from ::aidl::android::fmq::test::ITestAidlMsgQ follow.
-    ndk::ScopedAStatus configureFmqSyncReadWrite(const MQDescriptor& mqDesc,
-                                                 bool* _aidl_return) override;
-    ndk::ScopedAStatus getFmqUnsyncWrite(bool configureFmq, MQDescriptor* mqDesc,
+    ndk::ScopedAStatus configureFmqSyncReadWrite(
+            const MQDescriptor<int32_t, SynchronizedReadWrite>& mqDesc,
+            bool* _aidl_return) override;
+    ndk::ScopedAStatus getFmqUnsyncWrite(bool configureFmq,
+                                         MQDescriptor<int32_t, UnsynchronizedWrite>* mqDesc,
                                          bool* _aidl_return) override;
     ndk::ScopedAStatus requestBlockingRead(int32_t count) override;
     ndk::ScopedAStatus requestBlockingReadDefaultEventFlagBits(int32_t count) override;
