@@ -17,22 +17,41 @@
 #pragma once
 
 #include <aidl/android/hardware/common/MQDescriptor.h>
+#include <aidl/android/hardware/common/SynchronizedReadWrite.h>
+#include <aidl/android/hardware/common/UnsynchronizedWrite.h>
 #include <cutils/native_handle.h>
 #include <fmq/AidlMQDescriptorShim.h>
 #include <fmq/MessageQueueBase.h>
 #include <utils/Log.h>
+#include <type_traits>
 
 namespace android {
 
 using aidl::android::hardware::common::MQDescriptor;
+using aidl::android::hardware::common::SynchronizedReadWrite;
+using aidl::android::hardware::common::UnsynchronizedWrite;
 using android::details::AidlMQDescriptorShim;
 using android::hardware::MQFlavor;
 
+template <typename T>
+struct FlavorTypeToValue;
+
+template <>
+struct FlavorTypeToValue<SynchronizedReadWrite> {
+    static constexpr MQFlavor value = hardware::kSynchronizedReadWrite;
+};
+
+template <>
+struct FlavorTypeToValue<UnsynchronizedWrite> {
+    static constexpr MQFlavor value = hardware::kUnsynchronizedWrite;
+};
+
 typedef uint64_t RingBufferPosition;
 
-template <typename T, MQFlavor flavor>
-struct AidlMessageQueue final : public MessageQueueBase<AidlMQDescriptorShim, T, flavor> {
-    typedef AidlMQDescriptorShim<T, flavor> Descriptor;
+template <typename T, typename U>
+struct AidlMessageQueue final
+    : public MessageQueueBase<AidlMQDescriptorShim, T, FlavorTypeToValue<U>::value> {
+    typedef AidlMQDescriptorShim<T, FlavorTypeToValue<U>::value> Descriptor;
     /**
      * This constructor uses the external descriptor used with AIDL interfaces.
      * It will create an FMQ based on the descriptor that was obtained from
@@ -43,7 +62,7 @@ struct AidlMessageQueue final : public MessageQueueBase<AidlMQDescriptorShim, T,
      * @param resetPointers Boolean indicating whether the read/write pointers
      * should be reset or not.
      */
-    AidlMessageQueue(const MQDescriptor& desc, bool resetPointers = true);
+    AidlMessageQueue(const MQDescriptor<T, U>& desc, bool resetPointers = true);
     ~AidlMessageQueue() = default;
 
     /**
@@ -55,7 +74,7 @@ struct AidlMessageQueue final : public MessageQueueBase<AidlMQDescriptorShim, T,
      * also be allocated and mapped for an EventFlag word.
      */
     AidlMessageQueue(size_t numElementsInQueue, bool configureEventFlagWord = false);
-    MQDescriptor dupeDesc();
+    MQDescriptor<T, U> dupeDesc();
 
   private:
     AidlMessageQueue(const AidlMessageQueue& other) = delete;
@@ -63,19 +82,19 @@ struct AidlMessageQueue final : public MessageQueueBase<AidlMQDescriptorShim, T,
     AidlMessageQueue() = delete;
 };
 
-template <typename T, MQFlavor flavor>
-AidlMessageQueue<T, flavor>::AidlMessageQueue(const MQDescriptor& desc, bool resetPointers)
-    : MessageQueueBase<AidlMQDescriptorShim, T, flavor>(Descriptor(desc), resetPointers) {}
+template <typename T, typename U>
+AidlMessageQueue<T, U>::AidlMessageQueue(const MQDescriptor<T, U>& desc, bool resetPointers)
+    : MessageQueueBase<AidlMQDescriptorShim, T, FlavorTypeToValue<U>::value>(Descriptor(desc),
+                                                                             resetPointers) {}
 
-template <typename T, MQFlavor flavor>
-AidlMessageQueue<T, flavor>::AidlMessageQueue(size_t numElementsInQueue,
-                                              bool configureEventFlagWord)
-    : MessageQueueBase<AidlMQDescriptorShim, T, flavor>(numElementsInQueue,
-                                                        configureEventFlagWord) {}
+template <typename T, typename U>
+AidlMessageQueue<T, U>::AidlMessageQueue(size_t numElementsInQueue, bool configureEventFlagWord)
+    : MessageQueueBase<AidlMQDescriptorShim, T, FlavorTypeToValue<U>::value>(
+              numElementsInQueue, configureEventFlagWord) {}
 
-template <typename T, MQFlavor flavor>
-MQDescriptor AidlMessageQueue<T, flavor>::dupeDesc() {
-    auto* shim = MessageQueueBase<AidlMQDescriptorShim, T, flavor>::getDesc();
+template <typename T, typename U>
+MQDescriptor<T, U> AidlMessageQueue<T, U>::dupeDesc() {
+    auto* shim = MessageQueueBase<AidlMQDescriptorShim, T, FlavorTypeToValue<U>::value>::getDesc();
     if (shim) {
         std::vector<aidl::android::hardware::common::GrantorDescriptor> grantors;
         for (const auto& grantor : shim->grantors()) {
@@ -83,14 +102,14 @@ MQDescriptor AidlMessageQueue<T, flavor>::dupeDesc() {
                     .offset = static_cast<int32_t>(grantor.offset),
                     .extent = static_cast<int64_t>(grantor.extent)});
         }
-        return MQDescriptor{
+        return MQDescriptor<T, U>{
                 .quantum = static_cast<int32_t>(shim->getQuantum()),
                 .grantors = grantors,
                 .flags = static_cast<int32_t>(shim->getFlags()),
                 .fileDescriptor = ndk::ScopedFileDescriptor(dup(shim->handle()->data[0])),
         };
     } else {
-        return MQDescriptor();
+        return MQDescriptor<T, U>();
     }
 }
 
