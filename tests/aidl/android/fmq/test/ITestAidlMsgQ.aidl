@@ -17,6 +17,8 @@
 package android.fmq.test;
 
 import android.hardware.common.MQDescriptor;
+import android.hardware.common.SynchronizedReadWrite;
+import android.hardware.common.UnsynchronizedWrite;
 
 /**
  * Test interface for MQDescriptor.
@@ -31,7 +33,7 @@ interface ITestAidlMsgQ {
      *
      * @return True if the setup is successful.
      */
-    boolean configureFmqSyncReadWrite(in MQDescriptor mqDesc);
+    boolean configureFmqSyncReadWrite(in MQDescriptor<int, SynchronizedReadWrite> mqDesc);
 
     /**
      * This method requests the service to return an MQDescriptor to
@@ -47,7 +49,7 @@ interface ITestAidlMsgQ {
      * set up by the service. Client can use it to set up the FMQ at its end.
      */
     boolean getFmqUnsyncWrite(in boolean configureFmq,
-        out MQDescriptor mqDesc);
+        out MQDescriptor<int, UnsynchronizedWrite> mqDesc);
 
     /**
      * This method requests the service to trigger a blocking read.
