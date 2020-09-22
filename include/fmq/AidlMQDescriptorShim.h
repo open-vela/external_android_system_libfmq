@@ -18,25 +18,18 @@
 #include <cutils/native_handle.h>
 #include <fmq/MQDescriptorBase.h>
 #include <limits>
-#include <type_traits>
 
 namespace android {
 namespace details {
 
 using aidl::android::hardware::common::GrantorDescriptor;
 using aidl::android::hardware::common::MQDescriptor;
-using aidl::android::hardware::common::SynchronizedReadWrite;
-using aidl::android::hardware::common::UnsynchronizedWrite;
 using android::hardware::MQFlavor;
 
 template <typename T, MQFlavor flavor>
 struct AidlMQDescriptorShim {
     // Takes ownership of handle
-    AidlMQDescriptorShim(
-            const MQDescriptor<
-                    T, typename std::conditional<flavor == hardware::kSynchronizedReadWrite,
-                                                 SynchronizedReadWrite, UnsynchronizedWrite>::type>&
-                    desc);
+    AidlMQDescriptorShim(const MQDescriptor& desc);
 
     // Takes ownership of handle
     AidlMQDescriptorShim(size_t bufferSize, native_handle_t* nHandle, size_t messageSize,
@@ -78,10 +71,7 @@ struct AidlMQDescriptorShim {
 };
 
 template <typename T, MQFlavor flavor>
-AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(
-        const MQDescriptor<T, typename std::conditional<flavor == hardware::kSynchronizedReadWrite,
-                                                        SynchronizedReadWrite,
-                                                        UnsynchronizedWrite>::type>& desc)
+AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(const MQDescriptor& desc)
     : mQuantum(desc.quantum), mFlags(desc.flags) {
     if (desc.quantum < 0 || desc.flags < 0) {
         // MQDescriptor uses signed integers, but the values must be positive.
