@@ -19,6 +19,7 @@
 #error "GTest did not detect pthread library."
 #endif
 
+#include <aidl/android/fmq/test/FixedParcelable.h>
 #include <aidl/android/fmq/test/ITestAidlMsgQ.h>
 #include <android-base/logging.h>
 #include <android/binder_manager.h>
@@ -35,6 +36,8 @@ using android::sp;
 using android::status_t;
 
 // generated
+using ::aidl::android::fmq::test::EventFlagBits;
+using ::aidl::android::fmq::test::FixedParcelable;
 using ::aidl::android::fmq::test::ITestAidlMsgQ;
 using android::hardware::tests::msgq::V1_0::ITestMsgQ;
 
@@ -1091,4 +1094,30 @@ TYPED_TEST(UnsynchronizedWriteClient, OverflowNotificationTest) {
         std::vector<int32_t> readData(this->mNumMessagesMax);
         ASSERT_FALSE(this->mQueue->read(&readData[0], this->mNumMessagesMax));
     }
+}
+
+/*
+ * Make sure a valid queue can be created with different supported types.
+ * All fundamental or native types should work. An AIDL parcelable that is
+ * annotated with @FixedSize is supported. A parcelable without it, will cause
+ * a compilation error.
+ */
+typedef ::testing::Types<FixedParcelable, EventFlagBits, bool, int8_t, char, char16_t, int32_t,
+                         int64_t, float, double>
+        AidlTypeCheckTypes;
+
+template <typename T>
+class AidlTypeChecks : public ::testing::Test {};
+
+TYPED_TEST_CASE(AidlTypeChecks, AidlTypeCheckTypes);
+
+TYPED_TEST(AidlTypeChecks, FixedSizeParcelableTest) {
+    android::AidlMessageQueue<TypeParam, UnsynchronizedWrite> queue =
+            android::AidlMessageQueue<TypeParam, UnsynchronizedWrite>(64);
+    ASSERT_TRUE(queue.isValid());
+    // Make sure we can do a simple write/read of any value.
+    TypeParam writeData[1];
+    TypeParam readData[1];
+    EXPECT_TRUE(queue.write(writeData, 1));
+    EXPECT_TRUE(queue.read(readData, 1));
 }
