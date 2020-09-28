@@ -48,9 +48,24 @@ struct FlavorTypeToValue<UnsynchronizedWrite> {
 
 typedef uint64_t RingBufferPosition;
 
+/*
+ * AIDL parcelables will have the typedef fixed_size. It is std::true_type when the
+ * parcelable is annotated with @FixedSize, and std::false_type when not. Other types
+ * should not have the fixed_size typedef, so they will always resolve to std::false_type.
+ */
+template <typename T, typename = void>
+struct has_typedef_fixed_size : std::false_type {};
+
+template <typename T>
+struct has_typedef_fixed_size<T, std::void_t<typename T::fixed_size>> : T::fixed_size {};
+
 template <typename T, typename U>
 struct AidlMessageQueue final
     : public MessageQueueBase<AidlMQDescriptorShim, T, FlavorTypeToValue<U>::value> {
+    static_assert(has_typedef_fixed_size<T>::value == true || std::is_fundamental<T>::value ||
+                          std::is_enum<T>::value,
+                  "Only fundamental types, enums, and AIDL parcelables annotated with @FixedSize "
+                  "are supported as payload types(T).");
     typedef AidlMQDescriptorShim<T, FlavorTypeToValue<U>::value> Descriptor;
     /**
      * This constructor uses the external descriptor used with AIDL interfaces.
