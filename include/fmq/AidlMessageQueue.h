@@ -65,7 +65,7 @@ struct AidlMessageQueue final
     static_assert(has_typedef_fixed_size<T>::value == true || std::is_fundamental<T>::value ||
                           std::is_enum<T>::value,
                   "Only fundamental types, enums, and AIDL parcelables annotated with @FixedSize "
-                  "are supported as payload types(T).");
+                  "and built for the NDK backend are supported as payload types(T).");
     typedef AidlMQDescriptorShim<T, FlavorTypeToValue<U>::value> Descriptor;
     /**
      * This constructor uses the external descriptor used with AIDL interfaces.
