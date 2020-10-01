@@ -23,7 +23,7 @@ python_test_host {
         "android.hardware.tests.msgq@1.0-service-test",
         "fmq_test_client",
     ],
-    test_suites: ["general-tests", "vts"],
+    test_suites: ["general-tests"],
 }
 
 cc_test {
@@ -69,8 +69,7 @@ cc_test {
             suffix: "64",
         },
     },
-    test_suites: ["general-tests", "vts"],
-    auto_gen_config: false,
+    test_suites: ["general-tests"],
 }
 
 cc_test {
