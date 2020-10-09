@@ -49,8 +49,8 @@ using android::hardware::MQDescriptorSync;
 using android::hardware::MQDescriptorUnsync;
 using android::hardware::details::waitForHwService;
 
-using aidl::android::hardware::common::SynchronizedReadWrite;
-using aidl::android::hardware::common::UnsynchronizedWrite;
+using aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+using aidl::android::hardware::common::fmq::UnsynchronizedWrite;
 using android::hardware::kSynchronizedReadWrite;
 using android::hardware::kUnsynchronizedWrite;
 
@@ -138,7 +138,7 @@ class ClientUnsyncTestBase<AidlMessageQueueUnsync> : public ::testing::Test {
     bool getFmqUnsyncWrite(bool configureFmq, std::shared_ptr<ITestAidlMsgQ> service,
                            AidlMessageQueueUnsync** queue) {
         bool result = false;
-        aidl::android::hardware::common::MQDescriptor<int32_t, UnsynchronizedWrite> desc;
+        aidl::android::hardware::common::fmq::MQDescriptor<int32_t, UnsynchronizedWrite> desc;
         auto ret = service->getFmqUnsyncWrite(configureFmq, &desc, &result);
         *queue = new (std::nothrow) AidlMessageQueueUnsync(desc);
         return result && ret.isOk();

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <aidl/android/hardware/common/MQDescriptor.h>
+#include <aidl/android/hardware/common/fmq/MQDescriptor.h>
 #include <cutils/native_handle.h>
 #include <fmq/MQDescriptorBase.h>
 #include <limits>
@@ -23,10 +23,10 @@
 namespace android {
 namespace details {
 
-using aidl::android::hardware::common::GrantorDescriptor;
-using aidl::android::hardware::common::MQDescriptor;
-using aidl::android::hardware::common::SynchronizedReadWrite;
-using aidl::android::hardware::common::UnsynchronizedWrite;
+using aidl::android::hardware::common::fmq::GrantorDescriptor;
+using aidl::android::hardware::common::fmq::MQDescriptor;
+using aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+using aidl::android::hardware::common::fmq::UnsynchronizedWrite;
 using android::hardware::MQFlavor;
 
 template <typename T, MQFlavor flavor>

@@ -53,7 +53,7 @@ cc_test {
     static_libs: [
         "android.hardware.tests.msgq@1.0",
         "android.fmq.test-ndk_platform",
-        "android.hardware.common-unstable-ndk_platform",
+        "android.hardware.common.fmq-unstable-ndk_platform",
     ],
     whole_static_libs: [
         "android.hardware.tests.msgq@1.0-impl",
@@ -86,7 +86,7 @@ cc_test {
         "libutils",
     ],
     static_libs: [
-        "android.hardware.common-unstable-ndk_platform",
+        "android.hardware.common.fmq-unstable-ndk_platform",
     ],
 
     cflags: [

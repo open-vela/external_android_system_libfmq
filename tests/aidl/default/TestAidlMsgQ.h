@@ -29,9 +29,9 @@ namespace test {
 using ::aidl::android::fmq::test::EventFlagBits;
 using ::aidl::android::fmq::test::ITestAidlMsgQ;
 
-using ::aidl::android::hardware::common::MQDescriptor;
-using ::aidl::android::hardware::common::SynchronizedReadWrite;
-using ::aidl::android::hardware::common::UnsynchronizedWrite;
+using ::aidl::android::hardware::common::fmq::MQDescriptor;
+using ::aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+using ::aidl::android::hardware::common::fmq::UnsynchronizedWrite;
 using ::android::hardware::kSynchronizedReadWrite;
 using ::android::hardware::kUnsynchronizedWrite;
 using ::android::hardware::MQFlavor;

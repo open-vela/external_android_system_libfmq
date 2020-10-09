@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include <aidl/android/hardware/common/MQDescriptor.h>
-#include <aidl/android/hardware/common/SynchronizedReadWrite.h>
-#include <aidl/android/hardware/common/UnsynchronizedWrite.h>
+#include <aidl/android/hardware/common/fmq/MQDescriptor.h>
+#include <aidl/android/hardware/common/fmq/SynchronizedReadWrite.h>
+#include <aidl/android/hardware/common/fmq/UnsynchronizedWrite.h>
 #include <cutils/native_handle.h>
 #include <fmq/AidlMQDescriptorShim.h>
 #include <fmq/MessageQueueBase.h>
@@ -27,9 +27,9 @@
 
 namespace android {
 
-using aidl::android::hardware::common::MQDescriptor;
-using aidl::android::hardware::common::SynchronizedReadWrite;
-using aidl::android::hardware::common::UnsynchronizedWrite;
+using aidl::android::hardware::common::fmq::MQDescriptor;
+using aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+using aidl::android::hardware::common::fmq::UnsynchronizedWrite;
 using android::details::AidlMQDescriptorShim;
 using android::hardware::MQFlavor;
 
@@ -111,9 +111,9 @@ template <typename T, typename U>
 MQDescriptor<T, U> AidlMessageQueue<T, U>::dupeDesc() {
     auto* shim = MessageQueueBase<AidlMQDescriptorShim, T, FlavorTypeToValue<U>::value>::getDesc();
     if (shim) {
-        std::vector<aidl::android::hardware::common::GrantorDescriptor> grantors;
+        std::vector<aidl::android::hardware::common::fmq::GrantorDescriptor> grantors;
         for (const auto& grantor : shim->grantors()) {
-            grantors.push_back(aidl::android::hardware::common::GrantorDescriptor{
+            grantors.push_back(aidl::android::hardware::common::fmq::GrantorDescriptor{
                     .offset = static_cast<int32_t>(grantor.offset),
                     .extent = static_cast<int64_t>(grantor.extent)});
         }

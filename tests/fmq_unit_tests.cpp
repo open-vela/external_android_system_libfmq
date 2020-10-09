@@ -24,8 +24,8 @@
 #include <sstream>
 #include <thread>
 
-using aidl::android::hardware::common::SynchronizedReadWrite;
-using aidl::android::hardware::common::UnsynchronizedWrite;
+using aidl::android::hardware::common::fmq::SynchronizedReadWrite;
+using aidl::android::hardware::common::fmq::UnsynchronizedWrite;
 using android::hardware::kSynchronizedReadWrite;
 using android::hardware::kUnsynchronizedWrite;
 
@@ -245,7 +245,7 @@ TEST_F(AidlOnlyBadQueueConfig, QueueSizeTooLargeForAidl) {
 }
 
 TEST_F(AidlOnlyBadQueueConfig, NegativeAidlDescriptor) {
-    aidl::android::hardware::common::MQDescriptor<uint16_t, SynchronizedReadWrite> desc;
+    aidl::android::hardware::common::fmq::MQDescriptor<uint16_t, SynchronizedReadWrite> desc;
     desc.quantum = -10;
     AidlMessageQueueSync16* fmq = new (std::nothrow) AidlMessageQueueSync16(desc);
     ASSERT_NE(nullptr, fmq);
@@ -256,11 +256,11 @@ TEST_F(AidlOnlyBadQueueConfig, NegativeAidlDescriptor) {
 }
 
 TEST_F(AidlOnlyBadQueueConfig, NegativeAidlDescriptorGrantor) {
-    aidl::android::hardware::common::MQDescriptor<uint16_t, SynchronizedReadWrite> desc;
+    aidl::android::hardware::common::fmq::MQDescriptor<uint16_t, SynchronizedReadWrite> desc;
     desc.quantum = 2;
     desc.flags = 0;
     desc.grantors.push_back(
-            aidl::android::hardware::common::GrantorDescriptor{.offset = 12, .extent = -10});
+            aidl::android::hardware::common::fmq::GrantorDescriptor{.offset = 12, .extent = -10});
     AidlMessageQueueSync16* fmq = new (std::nothrow) AidlMessageQueueSync16(desc);
     ASSERT_NE(nullptr, fmq);
     /*
@@ -276,7 +276,7 @@ TEST_F(AidlOnlyBadQueueConfig, NegativeAidlDescriptorGrantor) {
  */
 TEST_F(AidlOnlyBadQueueConfig, MismatchedPayloadSize) {
     AidlMessageQueueSync16 fmq = AidlMessageQueueSync16(64);
-    aidl::android::hardware::common::MQDescriptor<uint16_t, SynchronizedReadWrite> desc =
+    aidl::android::hardware::common::fmq::MQDescriptor<uint16_t, SynchronizedReadWrite> desc =
             fmq.dupeDesc();
     // This should work fine with the unmodified MQDescriptor
     AidlMessageQueueSync16 fmq2 = AidlMessageQueueSync16(desc);

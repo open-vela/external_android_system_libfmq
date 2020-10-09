@@ -16,9 +16,9 @@
 
 package android.fmq.test;
 
-import android.hardware.common.MQDescriptor;
-import android.hardware.common.SynchronizedReadWrite;
-import android.hardware.common.UnsynchronizedWrite;
+import android.hardware.common.fmq.MQDescriptor;
+import android.hardware.common.fmq.SynchronizedReadWrite;
+import android.hardware.common.fmq.UnsynchronizedWrite;
 
 /**
  * Test interface for MQDescriptor.
