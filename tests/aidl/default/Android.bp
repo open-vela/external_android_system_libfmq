@@ -4,7 +4,7 @@ cc_library_static {
         "libbase",
         "libbinder_ndk",
         "libfmq",
-        "android.hardware.common-unstable-ndk_platform",
+        "android.hardware.common.fmq-unstable-ndk_platform",
     ],
     static_libs: [
         "android.fmq.test-ndk_platform",
