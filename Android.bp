@@ -46,6 +46,7 @@ cc_library {
         "-Werror",
     ],
     vendor_available: true,
+    product_available: true,
     // TODO(b/153609531): remove when no longer needed.
     native_bridge_supported: true,
     vndk: {
@@ -60,6 +61,7 @@ cc_library_headers {
     name: "libfmq-base",
     host_supported: true,
     vendor_available: true,
+    product_available: true,
     native_bridge_supported: true,
     recovery_available: true,
     apex_available: [
