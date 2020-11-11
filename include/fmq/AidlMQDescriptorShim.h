@@ -32,6 +32,10 @@ using android::hardware::MQFlavor;
 template <typename T, MQFlavor flavor>
 struct AidlMQDescriptorShim {
     // Takes ownership of handle
+    AidlMQDescriptorShim(const std::vector<android::hardware::GrantorDescriptor>& grantors,
+                         native_handle_t* nHandle, size_t size);
+
+    // Takes ownership of handle
     AidlMQDescriptorShim(
             const MQDescriptor<
                     T, typename std::conditional<flavor == hardware::kSynchronizedReadWrite,
@@ -115,6 +119,15 @@ AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(
     }
     mHandle->data[0] = dup(desc.fileDescriptor.get());
 }
+
+template <typename T, MQFlavor flavor>
+AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(
+        const std::vector<android::hardware::GrantorDescriptor>& grantors, native_handle_t* nhandle,
+        size_t size)
+    : mGrantors(grantors),
+      mHandle(nhandle),
+      mQuantum(static_cast<uint32_t>(size)),
+      mFlags(flavor) {}
 
 template <typename T, MQFlavor flavor>
 AidlMQDescriptorShim<T, flavor>& AidlMQDescriptorShim<T, flavor>::operator=(

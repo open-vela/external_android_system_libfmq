@@ -36,9 +36,13 @@ struct MessageQueue final : public MessageQueueBase<MQDescriptor, T, flavor> {
      * @param numElementsInQueue Capacity of the MessageQueue in terms of T.
      * @param configureEventFlagWord Boolean that specifies if memory should
      * also be allocated and mapped for an EventFlag word.
+     * @param bufferFd User-supplied file descriptor to map the memory for the ringbuffer
+     * By default, bufferFd=-1 means library will allocate ashmem region for ringbuffer.
+     * MessageQueue takes ownership of the file descriptor.
      */
-    MessageQueue(size_t numElementsInQueue, bool configureEventFlagWord = false)
-        : MessageQueueBase<MQDescriptor, T, flavor>(numElementsInQueue, configureEventFlagWord) {}
+    MessageQueue(size_t numElementsInQueue, bool configureEventFlagWord = false, int bufferFd = -1)
+        : MessageQueueBase<MQDescriptor, T, flavor>(numElementsInQueue, configureEventFlagWord,
+                                                    bufferFd) {}
 
   private:
     MessageQueue(const MessageQueue& other) = delete;
