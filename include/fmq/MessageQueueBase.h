@@ -50,9 +50,13 @@ struct MessageQueueBase {
      * @param numElementsInQueue Capacity of the MessageQueue in terms of T.
      * @param configureEventFlagWord Boolean that specifies if memory should
      * also be allocated and mapped for an EventFlag word.
+     * @param bufferFd User-supplied file descriptor to map the memory for the ringbuffer
+     * By default, bufferFd=-1 means library will allocate ashmem region for ringbuffer.
+     * MessageQueue takes ownership of the file descriptor.
      */
 
-    MessageQueueBase(size_t numElementsInQueue, bool configureEventFlagWord = false);
+    MessageQueueBase(size_t numElementsInQueue, bool configureEventFlagWord = false,
+                     int bufferFd = -1);
 
     /**
      * @return Number of items of type T that can be written into the FMQ
@@ -639,9 +643,13 @@ MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(const Descriptor
 
 template <template <typename, MQFlavor> typename MQDescriptorType, typename T, MQFlavor flavor>
 MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(size_t numElementsInQueue,
-                                                                bool configureEventFlagWord) {
+                                                                bool configureEventFlagWord,
+                                                                int bufferFd) {
     // Check if the buffer size would not overflow size_t
     if (numElementsInQueue > SIZE_MAX / sizeof(T)) {
+        if (bufferFd != -1) {
+            close(bufferFd);
+        }
         return;
     }
     /*
@@ -661,29 +669,80 @@ MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(size_t numElemen
      * kQueueSizeBytes needs to be aligned to word boundary so that all offsets
      * in the grantorDescriptor will be word aligned.
      */
-    size_t kAshmemSizePageAligned = (hardware::details::alignToWordBoundary(kQueueSizeBytes) +
-                                     kMetaDataSize + PAGE_SIZE - 1) &
-                                    ~(PAGE_SIZE - 1);
-
-    /*
-     * Create an ashmem region to map the memory for the ringbuffer,
-     * read counter and write counter.
-     */
-    int ashmemFd = ashmem_create_region("MessageQueue", kAshmemSizePageAligned);
-    ashmem_set_prot_region(ashmemFd, PROT_READ | PROT_WRITE);
+    size_t kAshmemSizePageAligned;
+    if (bufferFd != -1) {
+        // Allocate read counter and write counter only. User-supplied memory will be used for the
+        // ringbuffer.
+        kAshmemSizePageAligned = (kMetaDataSize + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    } else {
+        // Allocate ringbuffer, read counter and write counter.
+        kAshmemSizePageAligned = (hardware::details::alignToWordBoundary(kQueueSizeBytes) +
+                                  kMetaDataSize + PAGE_SIZE - 1) &
+                                 ~(PAGE_SIZE - 1);
+    }
 
     /*
      * The native handle will contain the fds to be mapped.
      */
-    native_handle_t* mqHandle = native_handle_create(1 /* numFds */, 0 /* numInts */);
+    int numFds = (bufferFd != -1) ? 2 : 1;
+    native_handle_t* mqHandle = native_handle_create(numFds, 0 /* numInts */);
     if (mqHandle == nullptr) {
+        if (bufferFd != -1) {
+            close(bufferFd);
+        }
         return;
     }
 
+    /*
+     * Create an ashmem region to map the memory.
+     */
+    int ashmemFd = ashmem_create_region("MessageQueue", kAshmemSizePageAligned);
+    ashmem_set_prot_region(ashmemFd, PROT_READ | PROT_WRITE);
     mqHandle->data[0] = ashmemFd;
-    mDesc = std::unique_ptr<Descriptor>(new (std::nothrow) Descriptor(
-            kQueueSizeBytes, mqHandle, sizeof(T), configureEventFlagWord));
+
+    if (bufferFd != -1) {
+        // Use user-supplied file descriptor for fdIndex 1
+        mqHandle->data[1] = bufferFd;
+
+        std::vector<android::hardware::GrantorDescriptor> grantors;
+        grantors.resize(configureEventFlagWord ? hardware::details::kMinGrantorCountForEvFlagSupport
+                                               : hardware::details::kMinGrantorCount);
+
+        size_t memSize[] = {
+                sizeof(hardware::details::RingBufferPosition), /* memory to be allocated for read
+                                                                  pointer counter */
+                sizeof(hardware::details::RingBufferPosition), /* memory to be allocated for write
+                                                                  pointer counter */
+                kQueueSizeBytes,              /* memory to be allocated for data buffer */
+                sizeof(std::atomic<uint32_t>) /* memory to be allocated for EventFlag word */
+        };
+
+        for (size_t grantorPos = 0, offset = 0; grantorPos < grantors.size(); grantorPos++) {
+            uint32_t grantorFdIndex;
+            size_t grantorOffset;
+            if (grantorPos == hardware::details::DATAPTRPOS) {
+                grantorFdIndex = 1;
+                grantorOffset = 0;
+            } else {
+                grantorFdIndex = 0;
+                grantorOffset = offset;
+                offset += memSize[grantorPos];
+            }
+            grantors[grantorPos] = {
+                    0 /* grantor flags */, grantorFdIndex,
+                    static_cast<uint32_t>(hardware::details::alignToWordBoundary(grantorOffset)),
+                    memSize[grantorPos]};
+        }
+
+        mDesc = std::unique_ptr<Descriptor>(new (std::nothrow)
+                                                    Descriptor(grantors, mqHandle, sizeof(T)));
+    } else {
+        mDesc = std::unique_ptr<Descriptor>(new (std::nothrow) Descriptor(
+                kQueueSizeBytes, mqHandle, sizeof(T), configureEventFlagWord));
+    }
     if (mDesc == nullptr) {
+        native_handle_close(mqHandle);
+        native_handle_delete(mqHandle);
         return;
     }
     initMemory(true);
