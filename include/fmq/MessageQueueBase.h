@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <android-base/unique_fd.h>
 #include <cutils/ashmem.h>
 #include <fmq/EventFlag.h>
 #include <sys/mman.h>
@@ -53,10 +54,17 @@ struct MessageQueueBase {
      * @param bufferFd User-supplied file descriptor to map the memory for the ringbuffer
      * By default, bufferFd=-1 means library will allocate ashmem region for ringbuffer.
      * MessageQueue takes ownership of the file descriptor.
+     * @param bufferSize size of buffer in bytes that bufferFd represents. This
+     * size must be larger than or equal to (numElementsInQueue * sizeof(T)).
+     * Otherwise, operations will cause out-of-bounds memory access.
      */
 
-    MessageQueueBase(size_t numElementsInQueue, bool configureEventFlagWord = false,
-                     int bufferFd = -1);
+    MessageQueueBase(size_t numElementsInQueue, bool configureEventFlagWord,
+                     android::base::unique_fd bufferFd, size_t bufferSize);
+
+    MessageQueueBase(size_t numElementsInQueue, bool configureEventFlagWord = false)
+        : MessageQueueBase(numElementsInQueue, configureEventFlagWord, android::base::unique_fd(),
+                           0) {}
 
     /**
      * @return Number of items of type T that can be written into the FMQ
@@ -474,7 +482,7 @@ bool MessageQueueBase<MQDescriptorType, T, flavor>::MemTransaction::getMemRegion
     if (startIdx + nMessages > firstRegionLength + secondRegionLength) {
         /*
          * Return false if 'nMessages' starting at 'startIdx' cannot be
-         * accomodated by the MemTransaction object.
+         * accommodated by the MemTransaction object.
          */
         return false;
     }
@@ -644,12 +652,19 @@ MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(const Descriptor
 template <template <typename, MQFlavor> typename MQDescriptorType, typename T, MQFlavor flavor>
 MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(size_t numElementsInQueue,
                                                                 bool configureEventFlagWord,
-                                                                int bufferFd) {
+                                                                android::base::unique_fd bufferFd,
+                                                                size_t bufferSize) {
     // Check if the buffer size would not overflow size_t
     if (numElementsInQueue > SIZE_MAX / sizeof(T)) {
-        if (bufferFd != -1) {
-            close(bufferFd);
-        }
+        hardware::details::logError("Requested message queue size too large. Size of elements: " +
+                                    std::to_string(sizeof(T)) +
+                                    ". Number of elements: " + std::to_string(numElementsInQueue));
+        return;
+    }
+    if (bufferFd != -1 && numElementsInQueue * sizeof(T) > bufferSize) {
+        hardware::details::logError("The supplied buffer size(" + std::to_string(bufferSize) +
+                                    ") is smaller than the required size(" +
+                                    std::to_string(numElementsInQueue * sizeof(T)) + ").");
         return;
     }
     /*
@@ -687,9 +702,6 @@ MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(size_t numElemen
     int numFds = (bufferFd != -1) ? 2 : 1;
     native_handle_t* mqHandle = native_handle_create(numFds, 0 /* numInts */);
     if (mqHandle == nullptr) {
-        if (bufferFd != -1) {
-            close(bufferFd);
-        }
         return;
     }
 
@@ -702,7 +714,11 @@ MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(size_t numElemen
 
     if (bufferFd != -1) {
         // Use user-supplied file descriptor for fdIndex 1
-        mqHandle->data[1] = bufferFd;
+        mqHandle->data[1] = bufferFd.get();
+        // release ownership of fd. mqHandle owns it now.
+        if (bufferFd.release() < 0) {
+            hardware::details::logError("Error releasing supplied bufferFd");
+        }
 
         std::vector<android::hardware::GrantorDescriptor> grantors;
         grantors.resize(configureEventFlagWord ? hardware::details::kMinGrantorCountForEvFlagSupport
@@ -750,9 +766,9 @@ MessageQueueBase<MQDescriptorType, T, flavor>::MessageQueueBase(size_t numElemen
 
 template <template <typename, MQFlavor> typename MQDescriptorType, typename T, MQFlavor flavor>
 MessageQueueBase<MQDescriptorType, T, flavor>::~MessageQueueBase() {
-    if (flavor == kUnsynchronizedWrite) {
+    if (flavor == kUnsynchronizedWrite && mReadPtr != nullptr) {
         delete mReadPtr;
-    } else {
+    } else if (mReadPtr != nullptr) {
         unmapGrantorDescr(mReadPtr, hardware::details::READPTRPOS);
     }
     if (mWritePtr != nullptr) {
