@@ -97,7 +97,8 @@ AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(
 
     mGrantors.resize(desc.grantors.size());
     for (size_t i = 0; i < desc.grantors.size(); ++i) {
-        if (desc.grantors[i].offset < 0 || desc.grantors[i].extent < 0) {
+        if (desc.grantors[i].offset < 0 || desc.grantors[i].extent < 0 ||
+            desc.grantors[i].fdIndex < 0) {
             // GrantorDescriptor uses signed integers, but the values must be positive.
             // Return before setting up the native_handle to make this invalid.
             hardware::details::logError(
@@ -107,17 +108,26 @@ AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(
             return;
         }
         mGrantors[i].flags = 0;
-        mGrantors[i].fdIndex = 0;
+        mGrantors[i].fdIndex = desc.grantors[i].fdIndex;
         mGrantors[i].offset = desc.grantors[i].offset;
         mGrantors[i].extent = desc.grantors[i].extent;
     }
 
-    mHandle = native_handle_create(1 /* num fds */, 0 /* num ints */);
+    mHandle = native_handle_create(desc.handle.fds.size() /* num fds */,
+                                   desc.handle.ints.size() /* num ints */);
     if (mHandle == nullptr) {
         hardware::details::logError("Null native_handle_t");
         return;
     }
-    mHandle->data[0] = dup(desc.fileDescriptor.get());
+    int data_index = 0;
+    for (const auto& fd : desc.handle.fds) {
+        mHandle->data[data_index] = dup(fd.get());
+        data_index++;
+    }
+    for (const auto& data_int : desc.handle.ints) {
+        mHandle->data[data_index] = data_int;
+        data_index++;
+    }
 }
 
 template <typename T, MQFlavor flavor>
