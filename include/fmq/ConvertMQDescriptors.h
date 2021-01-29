@@ -74,27 +74,32 @@ bool unsafeHidlToAidlMQDescriptor(
         logError("Destination AIDL MQDescriptor should be empty, but already contains grantors.");
         return false;
     }
-    uint32_t fdIndex = 0;
 
     for (const auto& grantor : hidlDesc.grantors()) {
-        if (static_cast<int32_t>(grantor.offset) < 0 || static_cast<int64_t>(grantor.extent) < 0) {
+        if (static_cast<int32_t>(grantor.offset) < 0 || static_cast<int64_t>(grantor.extent) < 0 ||
+            static_cast<int64_t>(grantor.fdIndex) < 0) {
             logError(
                     "Unsafe static_cast of grantor fields. Either the hardware::MQDescriptor is "
                     "invalid, or the MessageQueue is too large to be described by AIDL.");
             return false;
         }
-        if (!aidlDesc->grantors.empty() && fdIndex != grantor.fdIndex) {
-            logError("AIDL MQDescriptor does not support multiple FDs. " + std::to_string(fdIndex) +
-                     " and " + std::to_string(grantor.fdIndex));
-            return false;
-        }
-        fdIndex = grantor.fdIndex;
         aidlDesc->grantors.push_back(
-                GrantorDescriptor{.offset = static_cast<int32_t>(grantor.offset),
+                GrantorDescriptor{.fdIndex = static_cast<int32_t>(grantor.fdIndex),
+                                  .offset = static_cast<int32_t>(grantor.offset),
                                   .extent = static_cast<int64_t>(grantor.extent)});
     }
 
-    aidlDesc->fileDescriptor = ndk::ScopedFileDescriptor(dup(hidlDesc.handle()->data[fdIndex]));
+    std::vector<ndk::ScopedFileDescriptor> fds;
+    std::vector<int> ints;
+    int data_index = 0;
+    for (; data_index < hidlDesc.handle()->numFds; data_index++) {
+        fds.push_back(ndk::ScopedFileDescriptor(dup(hidlDesc.handle()->data[data_index])));
+    }
+    for (; data_index < hidlDesc.handle()->numFds + hidlDesc.handle()->numInts; data_index++) {
+        ints.push_back(hidlDesc.handle()->data[data_index]);
+    }
+
+    aidlDesc->handle = {std::move(fds), std::move(ints)};
     if (static_cast<int32_t>(hidlDesc.getQuantum()) < 0 ||
         static_cast<int32_t>(hidlDesc.getFlags()) < 0) {
         logError(

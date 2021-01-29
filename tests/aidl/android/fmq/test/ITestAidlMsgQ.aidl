@@ -43,12 +43,15 @@ interface ITestAidlMsgQ {
      *
      * @param configureFmq The server sets up a new unsynchronized FMQ if
      * this parameter is true.
+     * @param userFd True to initialize the message queue with a user supplied
+     * file descriptor for the ring buffer.
+     * False to let the message queue use a single FD for everything.
      *
      * @param out ret True if successful.
      * @param out mqDesc This structure describes the unsynchronized FMQ that was
      * set up by the service. Client can use it to set up the FMQ at its end.
      */
-    boolean getFmqUnsyncWrite(in boolean configureFmq,
+    boolean getFmqUnsyncWrite(in boolean configureFmq, in boolean userFd,
         out MQDescriptor<int, UnsynchronizedWrite> mqDesc);
 
     /**

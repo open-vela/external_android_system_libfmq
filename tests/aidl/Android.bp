@@ -7,6 +7,7 @@ aidl_interface {
         "android/fmq/test/*.aidl",
     ],
     imports: [
+        "android.hardware.common",
         "android.hardware.common.fmq",
     ],
     gen_trace: true,

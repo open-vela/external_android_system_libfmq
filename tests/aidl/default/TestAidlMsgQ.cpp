@@ -40,11 +40,19 @@ ndk::ScopedAStatus TestAidlMsgQ::configureFmqSyncReadWrite(
 }
 
 ndk::ScopedAStatus TestAidlMsgQ::getFmqUnsyncWrite(
-        bool configureFmq, MQDescriptor<int32_t, UnsynchronizedWrite>* mqDesc, bool* _aidl_return) {
+        bool configureFmq, bool userFd, MQDescriptor<int32_t, UnsynchronizedWrite>* mqDesc,
+        bool* _aidl_return) {
     if (configureFmq) {
         static constexpr size_t kNumElementsInQueue = 1024;
-        mFmqUnsynchronized.reset(new (std::nothrow)
-                                         TestAidlMsgQ::MessageQueueUnsync(kNumElementsInQueue));
+        static constexpr size_t kElementSizeBytes = sizeof(int32_t);
+        ::android::base::unique_fd ringbufferFd;
+        if (userFd) {
+            ringbufferFd.reset(
+                    ::ashmem_create_region("UnsyncWrite", kNumElementsInQueue * kElementSizeBytes));
+        }
+        mFmqUnsynchronized.reset(new (std::nothrow) TestAidlMsgQ::MessageQueueUnsync(
+                kNumElementsInQueue, false, std::move(ringbufferFd),
+                kNumElementsInQueue * kElementSizeBytes));
     }
 
     if ((mFmqUnsynchronized == nullptr) || (mFmqUnsynchronized->isValid() == false) ||

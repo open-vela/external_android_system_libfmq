@@ -48,7 +48,7 @@ struct TestAidlMsgQ : public BnTestAidlMsgQ {
     ndk::ScopedAStatus configureFmqSyncReadWrite(
             const MQDescriptor<int32_t, SynchronizedReadWrite>& mqDesc,
             bool* _aidl_return) override;
-    ndk::ScopedAStatus getFmqUnsyncWrite(bool configureFmq,
+    ndk::ScopedAStatus getFmqUnsyncWrite(bool configureFmq, bool userFd,
                                          MQDescriptor<int32_t, UnsynchronizedWrite>* mqDesc,
                                          bool* _aidl_return) override;
     ndk::ScopedAStatus requestBlockingRead(int32_t count) override;

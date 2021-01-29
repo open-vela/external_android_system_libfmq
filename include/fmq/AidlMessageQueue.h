@@ -90,8 +90,20 @@ struct AidlMessageQueue final
      * @param numElementsInQueue Capacity of the AidlMessageQueue in terms of T.
      * @param configureEventFlagWord Boolean that specifies if memory should
      * also be allocated and mapped for an EventFlag word.
+     * @param bufferFd User-supplied file descriptor to map the memory for the ringbuffer
+     * By default, bufferFd=-1 means library will allocate ashmem region for ringbuffer.
+     * MessageQueue takes ownership of the file descriptor.
+     * @param bufferSize size of buffer in bytes that bufferFd represents. This
+     * size must be larger than or equal to (numElementsInQueue * sizeof(T)).
+     * Otherwise, operations will cause out-of-bounds memory access.
      */
-    AidlMessageQueue(size_t numElementsInQueue, bool configureEventFlagWord = false);
+    AidlMessageQueue(size_t numElementsInQueue, bool configureEventFlagWord,
+                     android::base::unique_fd bufferFd, size_t bufferSize);
+
+    AidlMessageQueue(size_t numElementsInQueue, bool configureEventFlagWord = false)
+        : AidlMessageQueue(numElementsInQueue, configureEventFlagWord, android::base::unique_fd(),
+                           0) {}
+
     MQDescriptor<T, U> dupeDesc();
 
   private:
@@ -106,9 +118,10 @@ AidlMessageQueue<T, U>::AidlMessageQueue(const MQDescriptor<T, U>& desc, bool re
                                                                              resetPointers) {}
 
 template <typename T, typename U>
-AidlMessageQueue<T, U>::AidlMessageQueue(size_t numElementsInQueue, bool configureEventFlagWord)
+AidlMessageQueue<T, U>::AidlMessageQueue(size_t numElementsInQueue, bool configureEventFlagWord,
+                                         android::base::unique_fd bufferFd, size_t bufferSize)
     : MessageQueueBase<AidlMQDescriptorShim, T, FlavorTypeToValue<U>::value>(
-              numElementsInQueue, configureEventFlagWord) {}
+              numElementsInQueue, configureEventFlagWord, std::move(bufferFd), bufferSize) {}
 
 template <typename T, typename U>
 MQDescriptor<T, U> AidlMessageQueue<T, U>::dupeDesc() {
@@ -117,14 +130,24 @@ MQDescriptor<T, U> AidlMessageQueue<T, U>::dupeDesc() {
         std::vector<aidl::android::hardware::common::fmq::GrantorDescriptor> grantors;
         for (const auto& grantor : shim->grantors()) {
             grantors.push_back(aidl::android::hardware::common::fmq::GrantorDescriptor{
+                    .fdIndex = static_cast<int32_t>(grantor.fdIndex),
                     .offset = static_cast<int32_t>(grantor.offset),
                     .extent = static_cast<int64_t>(grantor.extent)});
+        }
+        std::vector<ndk::ScopedFileDescriptor> fds;
+        std::vector<int> ints;
+        int data_index = 0;
+        for (; data_index < shim->handle()->numFds; data_index++) {
+            fds.push_back(ndk::ScopedFileDescriptor(dup(shim->handle()->data[data_index])));
+        }
+        for (; data_index < shim->handle()->numFds + shim->handle()->numInts; data_index++) {
+            ints.push_back(shim->handle()->data[data_index]);
         }
         return MQDescriptor<T, U>{
                 .quantum = static_cast<int32_t>(shim->getQuantum()),
                 .grantors = grantors,
                 .flags = static_cast<int32_t>(shim->getFlags()),
-                .fileDescriptor = ndk::ScopedFileDescriptor(dup(shim->handle()->data[0])),
+                .handle = {std::move(fds), std::move(ints)},
         };
     } else {
         return MQDescriptor<T, U>();

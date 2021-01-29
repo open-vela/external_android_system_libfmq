@@ -36,9 +36,21 @@ struct MessageQueue final : public MessageQueueBase<MQDescriptor, T, flavor> {
      * @param numElementsInQueue Capacity of the MessageQueue in terms of T.
      * @param configureEventFlagWord Boolean that specifies if memory should
      * also be allocated and mapped for an EventFlag word.
+     * @param bufferFd User-supplied file descriptor to map the memory for the ringbuffer
+     * By default, bufferFd=-1 means library will allocate ashmem region for ringbuffer.
+     * MessageQueue takes ownership of the file descriptor.
+     * @param bufferSize size of buffer in bytes that bufferFd represents. This
+     * size must be larger than or equal to (numElementsInQueue * sizeof(T)).
+     * Otherwise, operations will cause out-of-bounds memory access.
      */
+    MessageQueue(size_t numElementsInQueue, bool configureEventFlagWord,
+                 android::base::unique_fd bufferFd, size_t bufferSize)
+        : MessageQueueBase<MQDescriptor, T, flavor>(numElementsInQueue, configureEventFlagWord,
+                                                    std::move(bufferFd), bufferSize) {}
+
     MessageQueue(size_t numElementsInQueue, bool configureEventFlagWord = false)
-        : MessageQueueBase<MQDescriptor, T, flavor>(numElementsInQueue, configureEventFlagWord) {}
+        : MessageQueueBase<MQDescriptor, T, flavor>(numElementsInQueue, configureEventFlagWord,
+                                                    android::base::unique_fd(), 0) {}
 
   private:
     MessageQueue(const MessageQueue& other) = delete;
