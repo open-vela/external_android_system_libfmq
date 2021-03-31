@@ -631,10 +631,16 @@ void MessageQueueBase<MQDescriptorType, T, flavor>::initMemory(bool resetPointer
 #endif
     }
 
-    mEvFlagWord =
-            static_cast<std::atomic<uint32_t>*>(mapGrantorDescr(hardware::details::EVFLAGWORDPOS));
-    if (mEvFlagWord != nullptr) {
-        android::hardware::EventFlag::createEventFlag(mEvFlagWord, &mEventFlag);
+    if (mDesc->countGrantors() > hardware::details::EVFLAGWORDPOS) {
+        mEvFlagWord = static_cast<std::atomic<uint32_t>*>(
+                mapGrantorDescr(hardware::details::EVFLAGWORDPOS));
+        if (mEvFlagWord != nullptr) {
+            android::hardware::EventFlag::createEventFlag(mEvFlagWord, &mEventFlag);
+        } else {
+#ifdef __BIONIC__
+            __assert(__FILE__, __LINE__, "mEvFlagWord is null");
+#endif
+        }
     }
 }
 
