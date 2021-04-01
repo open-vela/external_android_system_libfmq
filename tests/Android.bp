@@ -28,6 +28,9 @@ python_test_host {
         "fmq_test_client",
     ],
     test_suites: ["general-tests", "vts"],
+    test_options: {
+        unit_test: false,
+    },
 }
 
 cc_test {
