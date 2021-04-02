@@ -167,7 +167,8 @@ AidlMQDescriptorShim<T, flavor>& AidlMQDescriptorShim<T, flavor>::operator=(
 
 template <typename T, MQFlavor flavor>
 AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(size_t bufferSize, native_handle_t* nHandle,
-                                                      size_t messageSize, bool configureEventFlag) {
+                                                      size_t messageSize, bool configureEventFlag)
+    : mHandle(nHandle), mQuantum(messageSize), mFlags(flavor) {
     /*
      * TODO(b/165674950) Since AIDL does not support unsigned integers, it can only support
      * The offset of EventFlag word needs to fit into an int32_t in MQDescriptor. This word comes
@@ -188,9 +189,6 @@ AidlMQDescriptorShim<T, flavor>::AidlMQDescriptorShim(size_t bufferSize, native_
         return;
     }
 
-    mHandle = nHandle;
-    mQuantum = messageSize;
-    mFlags = flavor;
     /*
      * If configureEventFlag is true, allocate an additional spot in mGrantor
      * for containing the fd and offset for mmapping the EventFlag word.
