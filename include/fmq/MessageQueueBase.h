@@ -20,6 +20,7 @@
 #include <cutils/ashmem.h>
 #include <fmq/EventFlag.h>
 #include <sys/mman.h>
+#include <sys/user.h>
 #include <utils/Log.h>
 #include <utils/SystemClock.h>
 #include <atomic>

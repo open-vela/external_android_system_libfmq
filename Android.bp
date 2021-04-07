@@ -58,6 +58,7 @@ cc_library {
     },
     double_loadable: true,
     min_sdk_version: "29",
+    host_supported: true,
 }
 
 // Header only lib to share type between HIDL and AIDL MQDescriptor
