@@ -16,18 +16,14 @@
 
 #define LOG_TAG "FMQ_EventFlags"
 
+#include <fmq/EventFlag.h>
 #include <linux/futex.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
-
-#include <limits>
-#include <new>
-
-#include <fmq/EventFlag.h>
 #include <utils/Log.h>
 #include <utils/SystemClock.h>
+#include <new>
 
 namespace android {
 namespace hardware {
@@ -121,9 +117,9 @@ status_t EventFlag::wake(uint32_t bitmask) {
      * No need to call FUTEX_WAKE_BITSET if there were deferred wakes
      * already available for all set bits from bitmask.
      */
-    constexpr size_t kIntMax = std::numeric_limits<int>::max();
     if ((~old & bitmask) != 0) {
-        int ret = syscall(__NR_futex, mEfWordPtr, FUTEX_WAKE_BITSET, kIntMax, NULL, NULL, bitmask);
+        int ret = syscall(__NR_futex, mEfWordPtr, FUTEX_WAKE_BITSET,
+                          INT_MAX, NULL, NULL, bitmask);
         if (ret == -1) {
             status = -errno;
             ALOGE("Error in event flag wake attempt: %s\n", strerror(errno));
