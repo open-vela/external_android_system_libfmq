@@ -95,7 +95,7 @@ struct MessageQueue {
      *
      * @return Whether the write was successful.
      */
-    bool write(const T* data);
+    __attribute__((always_inline)) bool write(const T* data);
 
     /**
      * Non-blocking read from FMQ.
@@ -115,7 +115,7 @@ struct MessageQueue {
      *
      * @return Whether the write was successful.
      */
-    __attribute__((noinline)) bool write(const T* data, size_t count);
+    __attribute__((always_inline)) bool write(const T* data, size_t count);
 
     /**
      * Perform a blocking write of 'count' items into the FMQ using EventFlags.
