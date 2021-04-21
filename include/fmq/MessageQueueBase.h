@@ -125,7 +125,7 @@ struct MessageQueueBase {
      *
      * @return Whether the write was successful.
      */
-    __attribute__((noinline)) bool write(const T* data, size_t count);
+    bool write(const T* data, size_t count);
 
     /**
      * Perform a blocking write of 'count' items into the FMQ using EventFlags.
@@ -180,7 +180,7 @@ struct MessageQueueBase {
      *
      * @return Whether the read was successful.
      */
-    __attribute__((noinline)) bool read(T* data, size_t count);
+    bool read(T* data, size_t count);
 
     /**
      * Perform a blocking read operation of 'count' items from the FMQ. Does not
@@ -384,7 +384,7 @@ struct MessageQueueBase {
      * @return Whether it is possible to write 'nMessages' items of type T
      * into the FMQ.
      */
-    __attribute__((always_inline)) bool beginWrite(size_t nMessages, MemTransaction* memTx) const;
+    bool beginWrite(size_t nMessages, MemTransaction* memTx) const;
 
     /**
      * Commit a write of size 'nMessages'. To be only used after a call to beginWrite().
@@ -408,7 +408,7 @@ struct MessageQueueBase {
      * @return bool Whether it is possible to read 'nMessages' items of type T
      * from the FMQ.
      */
-    __attribute__((always_inline)) bool beginRead(size_t nMessages, MemTransaction* memTx) const;
+    bool beginRead(size_t nMessages, MemTransaction* memTx) const;
 
     /**
      * Commit a read of size 'nMessages'. To be only used after a call to beginRead().
@@ -1070,9 +1070,9 @@ bool MessageQueueBase<MQDescriptorType, T, flavor>::beginWrite(size_t nMessages,
 
     auto writePtr = mWritePtr->load(std::memory_order_relaxed);
     if (writePtr % sizeof(T) != 0) {
-        hardware::details::logError("The write pointer has become misaligned. "
-                                  "Writing to the queue is no longer "
-                                  "possible.");
+        hardware::details::logError(
+                "The write pointer has become misaligned. Writing to the queue is no longer "
+                "possible.");
         return false;
     }
     size_t writeOffset = writePtr % mDesc->getSize();
@@ -1161,9 +1161,9 @@ MessageQueueBase<MQDescriptorType, T, flavor>::beginRead(size_t nMessages,
      */
     auto readPtr = mReadPtr->load(std::memory_order_relaxed);
     if (writePtr % sizeof(T) != 0 || readPtr % sizeof(T) != 0) {
-        hardware::details::logError("The write or read pointer has become "
-                                  "misaligned. Reading from the queue is no "
-                                  "longer possible.");
+        hardware::details::logError(
+                "The write or read pointer has become misaligned. Reading from the queue is no "
+                "longer possible.");
         return false;
     }
 

@@ -59,8 +59,7 @@ typedef android::AidlMessageQueue<int32_t, UnsynchronizedWrite> AidlMessageQueue
 typedef android::hardware::MessageQueue<int32_t, kSynchronizedReadWrite> MessageQueueSync;
 typedef android::hardware::MessageQueue<int32_t, kUnsynchronizedWrite> MessageQueueUnsync;
 static const std::string kServiceName = "BnTestAidlMsgQ";
-static constexpr size_t kNumElementsInSyncQueue =
-    (PAGE_SIZE - 16) / sizeof(uint16_t);
+static constexpr size_t kNumElementsInSyncQueue = (PAGE_SIZE - 16) / sizeof(int32_t);
 
 enum class SetupType {
     SINGLE_FD,
@@ -649,33 +648,38 @@ TYPED_TEST(SynchronizedReadWriteClient, SmallInputReaderTest1) {
  * counter to the last byte in the ring buffer. Request another write from
  * mService. The write should fail because the write address is misaligned.
  */
-TEST_F(SynchronizedReadWriteClient, MisalignedWriteCounter) {
+TYPED_TEST(SynchronizedReadWriteClient, MisalignedWriteCounter) {
+    if (TypeParam::UserFd) {
+        // When using the second FD for the ring buffer, we can't get to the read/write
+        // counters from a pointer to the ring buffer, so no sense in testing.
+        GTEST_SKIP();
+    }
     const size_t dataLen = 1;
-    bool ret = mService->requestWriteFmqSync(dataLen);
+    ASSERT_LE(dataLen, kNumElementsInSyncQueue);
+    bool ret = this->requestWriteFmqSync(dataLen);
     ASSERT_TRUE(ret);
-    // begin read and get a MemTransaction object for the first object in the
-    // queue
-    MessageQueueSync::MemTransaction tx;
-    ASSERT_TRUE(mQueue->beginRead(dataLen, &tx));
+    // begin read and get a MemTransaction object for the first object in the queue
+    typename TypeParam::MQType::MemTransaction tx;
+    ASSERT_TRUE(this->mQueue->beginRead(dataLen, &tx));
     // get a pointer to the beginning of the ring buffer
-    const auto &region = tx.getFirstRegion();
-    uint16_t *firstStart = region.getAddress();
+    const auto& region = tx.getFirstRegion();
+    int32_t* firstStart = region.getAddress();
 
     // because this is the first location in the ring buffer, we can get
     // access to the read and write pointer stored in the fd. 8 bytes back for the
     // write counter and 16 bytes back for the read counter
-    uint64_t *writeCntr = (uint64_t *)((uint8_t *)firstStart - 8);
+    uint64_t* writeCntr = (uint64_t*)((uint8_t*)firstStart - 8);
 
     // set it to point to the very last byte in the ring buffer
-    *(writeCntr) = mQueue->getQuantumCount() * mQueue->getQuantumSize() - 1;
-    ASSERT_TRUE(*writeCntr % sizeof(uint16_t) != 0);
+    *(writeCntr) = this->mQueue->getQuantumCount() * this->mQueue->getQuantumSize() - 1;
+    ASSERT_TRUE(*writeCntr % sizeof(int32_t) != 0);
 
     // this is not actually necessary, but it's the expected the pattern.
-    mQueue->commitRead(dataLen);
+    this->mQueue->commitRead(dataLen);
 
-    // This next write will be misaligned and will overlap outside of the ring
-    // buffer. The write should fail.
-    ret = mService->requestWriteFmqSync(dataLen);
+    // This next write will be misaligned and will overlap outside of the ring buffer.
+    // The write should fail.
+    ret = this->requestWriteFmqSync(dataLen);
     EXPECT_FALSE(ret);
 }
 
