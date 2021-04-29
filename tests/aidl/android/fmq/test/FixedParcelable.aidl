@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,12 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "FMQ"
-#include <android-base/logging.h>
-#include <utils/Log.h>
+package android.fmq.test;
 
-namespace android {
-namespace hardware {
-namespace details {
+import android.fmq.test.EventFlagBits;
 
-void check(bool exp) {
-    CHECK(exp);
+@FixedSize
+parcelable FixedParcelable {
+  int a;
+  EventFlagBits b;
 }
-
-void logError(const std::string &message) {
-    LOG(ERROR) << message;
-}
-
-void errorWriteLog(int tag, const char* info) {
-    android_errorWriteLog(tag, info);
-}
-
-}  // namespace details
-}  // namespace hardware
-}  // namespace android
