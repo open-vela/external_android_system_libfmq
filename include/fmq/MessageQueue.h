@@ -95,7 +95,7 @@ struct MessageQueue {
      *
      * @return Whether the write was successful.
      */
-    __attribute__((always_inline)) bool write(const T* data);
+    bool write(const T* data);
 
     /**
      * Non-blocking read from FMQ.
@@ -115,7 +115,7 @@ struct MessageQueue {
      *
      * @return Whether the write was successful.
      */
-    __attribute__((always_inline)) bool write(const T* data, size_t count);
+    __attribute__((noinline)) bool write(const T* data, size_t count);
 
     /**
      * Perform a blocking write of 'count' items into the FMQ using EventFlags.
@@ -1181,7 +1181,14 @@ template <typename T, MQFlavor flavor>
 void* MessageQueue<T, flavor>::mapGrantorDescr(uint32_t grantorIdx) {
     const native_handle_t* handle = mDesc->handle();
     auto grantors = mDesc->grantors();
-    if ((handle == nullptr) || (grantorIdx >= grantors.size())) {
+    if (handle == nullptr) {
+        details::logError("mDesc->handle is null");
+        return nullptr;
+    }
+
+    if (grantorIdx >= grantors.size()) {
+        details::logError(std::string("grantorIdx must be less than ") +
+                          std::to_string(grantors.size()));
         return nullptr;
     }
 
@@ -1195,10 +1202,11 @@ void* MessageQueue<T, flavor>::mapGrantorDescr(uint32_t grantorIdx) {
 
     void* address = mmap(0, mapLength, PROT_READ | PROT_WRITE, MAP_SHARED,
                          handle->data[fdIndex], mapOffset);
-    return (address == MAP_FAILED)
-            ? nullptr
-            : reinterpret_cast<uint8_t*>(address) +
-            (grantors[grantorIdx].offset - mapOffset);
+    if (address == MAP_FAILED) {
+        details::logError(std::string("mmap failed: ") + std::to_string(errno));
+        return nullptr;
+    }
+    return reinterpret_cast<uint8_t*>(address) + (grantors[grantorIdx].offset - mapOffset);
 }
 
 template <typename T, MQFlavor flavor>
