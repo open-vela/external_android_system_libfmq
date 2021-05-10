@@ -15,28 +15,23 @@
 #
 
 LOCAL_PATH := $(call my-dir)
-
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
-    msgq_benchmark_client.cpp
-
-LOCAL_CFLAGS := -Wall -Werror
-
-LOCAL_SHARED_LIBRARIES := \
-    libhwbinder \
-    libbase \
-    libcutils \
-    libutils \
-    libhidlbase \
-    libhidltransport
-
-LOCAL_REQUIRED_MODULES := android.hardware.tests.msgq@1.0-impl
+LOCAL_MODULE := fmq_test
+LOCAL_MODULE_CLASS := NATIVE_TESTS
+LOCAL_SRC_FILES := fmq_test
+LOCAL_REQUIRED_MODULES :=                           \
+    mq_test_client                                  \
+    android.hardware.tests.msgq@1.0-service-test    \
+    hidl_test_helper
 
 ifneq ($(TARGET_2ND_ARCH),)
-LOCAL_REQUIRED_MODULES += android.hardware.tests.msgq@1.0-impl$(TARGET_2ND_ARCH_MODULE_SUFFIX)
+LOCAL_REQUIRED_MODULES += android.hardware.tests.msgq@1.0-service-test$(TARGET_2ND_ARCH_MODULE_SUFFIX)
+LOCAL_REQUIRED_MODULES += mq_test_client$(TARGET_2ND_ARCH_MODULE_SUFFIX)
 endif
 
-LOCAL_SHARED_LIBRARIES += android.hardware.tests.msgq@1.0 libfmq
-LOCAL_MODULE := mq_benchmark_client
-include $(BUILD_NATIVE_TEST)
+include $(BUILD_PREBUILT)
 
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := VtsFmqUnitTests
+-include test/vts/tools/build/Android.host_config.mk
