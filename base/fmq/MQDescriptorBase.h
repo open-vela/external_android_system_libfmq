@@ -54,6 +54,7 @@ static_assert(__alignof(GrantorDescriptor) == 8, "wrong alignment");
 namespace details {
 
 void logError(const std::string& message);
+void errorWriteLog(int tag, const char* message);
 
 typedef uint64_t RingBufferPosition;
 enum GrantorType : int { READPTRPOS = 0, WRITEPTRPOS, DATAPTRPOS, EVFLAGWORDPOS };
