@@ -49,14 +49,11 @@ cc_fuzz {
         libfuzzer_options: [
             "max_len=50000",
         ],
-        fuzz_on_haiku_host: false,
-        fuzz_on_haiku_device: false,
     },
 
     host_supported: true,
 
     sanitize: {
-        hwaddress: true,
         scs: true,
         cfi: true,
         memtag_heap: true,
