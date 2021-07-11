@@ -16,7 +16,6 @@
 
 #define LOG_TAG "FMQ"
 #include <android-base/logging.h>
-#include <utils/Log.h>
 
 namespace android {
 namespace hardware {
@@ -28,10 +27,6 @@ void check(bool exp) {
 
 void logError(const std::string &message) {
     LOG(ERROR) << message;
-}
-
-void errorWriteLog(int tag, const char* info) {
-    android_errorWriteLog(tag, info);
 }
 
 }  // namespace details
