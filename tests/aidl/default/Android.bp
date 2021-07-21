@@ -10,7 +10,7 @@ cc_library_static {
         "libfmq",
     ],
     static_libs: [
-        "android.fmq.test-ndk",
+        "android.fmq.test-ndk_platform",
     ],
     export_include_dirs: ["."],
     srcs: [
