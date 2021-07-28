@@ -589,7 +589,9 @@ void MessageQueueBase<MQDescriptorType, T, flavor>::initMemory(bool resetPointer
     const auto& grantors = mDesc->grantors();
     for (const auto& grantor : grantors) {
         if (hardware::details::isAlignedToWordBoundary(grantor.offset) == false) {
+#ifdef __BIONIC__
             __assert(__FILE__, __LINE__, "Grantor offsets need to be aligned");
+#endif
         }
     }
 
@@ -1069,6 +1071,13 @@ bool MessageQueueBase<MQDescriptorType, T, flavor>::beginWrite(size_t nMessages,
     }
 
     auto writePtr = mWritePtr->load(std::memory_order_relaxed);
+    if (writePtr % sizeof(T) != 0) {
+        hardware::details::logError(
+                "The write pointer has become misaligned. Writing to the queue is no longer "
+                "possible.");
+        hardware::details::errorWriteLog(0x534e4554, "184963385");
+        return false;
+    }
     size_t writeOffset = writePtr % mDesc->getSize();
 
     /*
@@ -1154,6 +1163,13 @@ MessageQueueBase<MQDescriptorType, T, flavor>::beginRead(size_t nMessages,
      * stores to mReadPtr from a different thread.
      */
     auto readPtr = mReadPtr->load(std::memory_order_relaxed);
+    if (writePtr % sizeof(T) != 0 || readPtr % sizeof(T) != 0) {
+        hardware::details::logError(
+                "The write or read pointer has become misaligned. Reading from the queue is no "
+                "longer possible.");
+        hardware::details::errorWriteLog(0x534e4554, "184963385");
+        return false;
+    }
 
     if (writePtr - readPtr > mDesc->getSize()) {
         mReadPtr->store(writePtr, std::memory_order_release);
