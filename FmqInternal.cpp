@@ -26,10 +26,6 @@ void check(bool exp) {
     CHECK(exp);
 }
 
-void check(bool exp, const char* message) {
-    CHECK(exp) << message;
-}
-
 void logError(const std::string &message) {
     LOG(ERROR) << message;
 }

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <android-base/logging.h>
 #include <asm-generic/mman.h>
 #include <fmq/AidlMessageQueue.h>
 #include <fmq/ConvertMQDescriptors.h>
@@ -515,9 +514,8 @@ TEST_F(AidlOnlyBadQueueConfig, MismatchedPayloadSize) {
  * "mRing is null".
  */
 TEST_F(DoubleFdFailures, InvalidFd) {
-    android::base::SetLogger(android::base::StdioLogger);
     EXPECT_DEATH_IF_SUPPORTED(AidlMessageQueueSync(64, false, android::base::unique_fd(3000), 64),
-                              "Check failed: exp mRing is null");
+                              "mRing is null");
 }
 
 /*
