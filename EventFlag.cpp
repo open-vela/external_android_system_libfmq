@@ -32,26 +32,6 @@
 namespace android {
 namespace hardware {
 
-status_t EventFlag::createEventFlag(int fd, off_t offset, EventFlag** flag) {
-    if (flag == nullptr) {
-        return BAD_VALUE;
-    }
-
-    status_t status = NO_MEMORY;
-    *flag = nullptr;
-
-    EventFlag* evFlag = new (std::nothrow) EventFlag(fd, offset, &status);
-    if (evFlag != nullptr) {
-        if (status == NO_ERROR) {
-            *flag = evFlag;
-        } else {
-            delete evFlag;
-        }
-    }
-
-    return status;
-}
-
 status_t EventFlag::createEventFlag(std::atomic<uint32_t>* fwAddr,
                                     EventFlag** flag) {
     if (flag == nullptr) {
