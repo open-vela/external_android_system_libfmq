@@ -11,8 +11,8 @@ aidl_interface {
         "android/fmq/test/*.aidl",
     ],
     imports: [
-        "android.hardware.common",
-        "android.hardware.common.fmq",
+        "android.hardware.common-V2",
+        "android.hardware.common.fmq-V1",
     ],
     gen_trace: true,
     backend: {
