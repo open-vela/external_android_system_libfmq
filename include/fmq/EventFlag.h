@@ -95,11 +95,6 @@ private:
     std::atomic<uint32_t>* mEfWordPtr = nullptr;
 
     /*
-     * mmap memory for the event flag word.
-     */
-    EventFlag(int fd, off_t offset, status_t* status);
-
-    /*
      * Use this constructor if we already know where the event flag word
      * lives.
      */
