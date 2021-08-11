@@ -29,7 +29,7 @@ cc_fuzz {
 
     static_libs: [
         "libfmq",
-        "android.hardware.common.fmq-V1-ndk_platform",
+        "android.hardware.common.fmq-V1-ndk",
     ],
 
     shared_libs: [
@@ -54,7 +54,6 @@ cc_fuzz {
     host_supported: true,
 
     sanitize: {
-        hwaddress: true,
         scs: true,
         cfi: true,
         memtag_heap: true,
