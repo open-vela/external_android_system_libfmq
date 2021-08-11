@@ -54,23 +54,6 @@ status_t EventFlag::createEventFlag(std::atomic<uint32_t>* fwAddr,
 }
 
 /*
- * mmap memory for the futex word
- */
-EventFlag::EventFlag(int fd, off_t offset, status_t* status) {
-    mEfWordPtr = static_cast<std::atomic<uint32_t>*>(mmap(NULL,
-                                                          sizeof(std::atomic<uint32_t>),
-                                                          PROT_READ | PROT_WRITE,
-                                                          MAP_SHARED, fd, offset));
-    mEfWordNeedsUnmapping = true;
-    if (mEfWordPtr != MAP_FAILED) {
-        *status = NO_ERROR;
-    } else {
-        *status = -errno;
-        ALOGE("Attempt to mmap event flag word failed: %s\n", strerror(errno));
-    }
-}
-
-/*
  * Use this constructor if we already know where the futex word for
  * the EventFlag group lives.
  */
