@@ -35,6 +35,9 @@ using android::hardware::kUnsynchronizedWrite;
 
 typedef int32_t payload_t;
 
+// The reader will wait for 10 ms
+static constexpr int kBlockingTimeoutNs = 10000000;
+
 /*
  * MessageQueueBase.h contains asserts when memory allocation fails. So we need
  * to set a reasonable limit if we want to avoid those asserts.
@@ -55,6 +58,7 @@ static constexpr int kWriteCounterOffsetBytes = 8;
 
 static constexpr int kMaxNumSyncReaders = 1;
 static constexpr int kMaxNumUnsyncReaders = 5;
+static constexpr int kMaxDataPerReader = 5;
 
 typedef android::AidlMessageQueue<payload_t, SynchronizedReadWrite> AidlMessageQueueSync;
 typedef android::AidlMessageQueue<payload_t, UnsynchronizedWrite> AidlMessageQueueUnsync;
@@ -95,6 +99,32 @@ void reader(const Desc& desc, std::vector<uint8_t> readerData) {
     }
 }
 
+template <typename Queue, typename Desc>
+void readerBlocking(const Desc& desc, std::vector<uint8_t> readerData) {
+    Queue readMq(desc);
+    if (!readMq.isValid()) {
+        LOG(ERROR) << "read mq invalid";
+        return;
+    }
+    FuzzedDataProvider fdp(&readerData[0], readerData.size());
+    bool success;
+    do {
+        size_t count = fdp.remaining_bytes()
+                               ? fdp.ConsumeIntegralInRange<size_t>(1, readMq.getQuantumCount())
+                               : 1;
+        std::vector<payload_t> data;
+        data.reserve(count);
+        success = readMq.readBlocking(data.data(), count, kBlockingTimeoutNs);
+    } while (success == true || fdp.remaining_bytes() > sizeof(size_t));
+}
+
+// Can't use blocking calls with Unsync queues(there is a static_assert)
+template <>
+void readerBlocking<AidlMessageQueueUnsync, AidlMQDescUnsync>(const AidlMQDescUnsync&,
+                                                              std::vector<uint8_t>) {}
+template <>
+void readerBlocking<MessageQueueUnsync, MQDescUnsync>(const MQDescUnsync&, std::vector<uint8_t>) {}
+
 template <typename Queue>
 void writer(Queue& writeMq, FuzzedDataProvider& fdp) {
     while (fdp.remaining_bytes()) {
@@ -120,11 +150,30 @@ void writer(Queue& writeMq, FuzzedDataProvider& fdp) {
     }
 }
 
+template <typename Queue>
+void writerBlocking(Queue& writeMq, FuzzedDataProvider& fdp) {
+    while (fdp.remaining_bytes() > sizeof(size_t)) {
+        size_t count = fdp.ConsumeIntegralInRange<size_t>(1, writeMq.getQuantumCount());
+        std::vector<payload_t> data;
+        for (int i = 0; i < count; i++) {
+            data.push_back(fdp.ConsumeIntegral<payload_t>());
+        }
+        writeMq.writeBlocking(data.data(), count, kBlockingTimeoutNs);
+    }
+}
+
+// Can't use blocking calls with Unsync queues(there is a static_assert)
+template <>
+void writerBlocking<AidlMessageQueueUnsync>(AidlMessageQueueUnsync&, FuzzedDataProvider&) {}
+template <>
+void writerBlocking<MessageQueueUnsync>(MessageQueueUnsync&, FuzzedDataProvider&) {}
+
 template <typename Queue, typename Desc>
 void fuzzAidlWithReaders(std::vector<uint8_t>& writerData,
-                         std::vector<std::vector<uint8_t>>& readerData) {
+                         std::vector<std::vector<uint8_t>>& readerData, bool blocking) {
     FuzzedDataProvider fdp(&writerData[0], writerData.size());
-    Queue writeMq(fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements), fdp.ConsumeBool());
+    bool evFlag = blocking || fdp.ConsumeBool();
+    Queue writeMq(fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements), evFlag);
     if (!writeMq.isValid()) {
         LOG(ERROR) << "AIDL write mq invalid";
         return;
@@ -134,10 +183,19 @@ void fuzzAidlWithReaders(std::vector<uint8_t>& writerData,
 
     std::vector<std::thread> clients;
     for (int i = 0; i < readerData.size(); i++) {
-        clients.emplace_back(reader<Queue, Desc>, std::ref(desc), std::ref(readerData[i]));
+        if (blocking) {
+            clients.emplace_back(readerBlocking<Queue, Desc>, std::ref(desc),
+                                 std::ref(readerData[i]));
+        } else {
+            clients.emplace_back(reader<Queue, Desc>, std::ref(desc), std::ref(readerData[i]));
+        }
     }
 
-    writer<Queue>(writeMq, fdp);
+    if (blocking) {
+        writerBlocking<Queue>(writeMq, fdp);
+    } else {
+        writer<Queue>(writeMq, fdp);
+    }
 
     for (auto& client : clients) {
         client.join();
@@ -146,9 +204,10 @@ void fuzzAidlWithReaders(std::vector<uint8_t>& writerData,
 
 template <typename Queue, typename Desc>
 void fuzzHidlWithReaders(std::vector<uint8_t>& writerData,
-                         std::vector<std::vector<uint8_t>>& readerData) {
+                         std::vector<std::vector<uint8_t>>& readerData, bool blocking) {
     FuzzedDataProvider fdp(&writerData[0], writerData.size());
-    Queue writeMq(fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements), fdp.ConsumeBool());
+    bool evFlag = blocking || fdp.ConsumeBool();
+    Queue writeMq(fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements), evFlag);
     if (!writeMq.isValid()) {
         LOG(ERROR) << "HIDL write mq invalid";
         return;
@@ -158,10 +217,19 @@ void fuzzHidlWithReaders(std::vector<uint8_t>& writerData,
 
     std::vector<std::thread> clients;
     for (int i = 0; i < readerData.size(); i++) {
-        clients.emplace_back(reader<Queue, Desc>, std::ref(*desc), std::ref(readerData[i]));
+        if (blocking) {
+            clients.emplace_back(readerBlocking<Queue, Desc>, std::ref(*desc),
+                                 std::ref(readerData[i]));
+        } else {
+            clients.emplace_back(reader<Queue, Desc>, std::ref(*desc), std::ref(readerData[i]));
+        }
     }
 
-    writer<Queue>(writeMq, fdp);
+    if (blocking) {
+        writerBlocking<Queue>(writeMq, fdp);
+    } else {
+        writer<Queue>(writeMq, fdp);
+    }
 
     for (auto& client : clients) {
         client.join();
@@ -179,16 +247,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     uint8_t numReaders = fuzzSync ? fdp.ConsumeIntegralInRange<uint8_t>(0, kMaxNumSyncReaders)
                                   : fdp.ConsumeIntegralInRange<uint8_t>(0, kMaxNumUnsyncReaders);
     for (int i = 0; i < numReaders; i++) {
-        readerData.emplace_back(fdp.ConsumeBytes<uint8_t>(5));
+        readerData.emplace_back(fdp.ConsumeBytes<uint8_t>(kMaxDataPerReader));
     }
     std::vector<uint8_t> writerData = fdp.ConsumeRemainingBytes<uint8_t>();
-
+    bool fuzzBlocking = fdp.ConsumeBool();
     if (fuzzSync) {
-        fuzzHidlWithReaders<MessageQueueSync, MQDescSync>(writerData, readerData);
-        fuzzAidlWithReaders<AidlMessageQueueSync, AidlMQDescSync>(writerData, readerData);
+        fuzzHidlWithReaders<MessageQueueSync, MQDescSync>(writerData, readerData, fuzzBlocking);
+        fuzzAidlWithReaders<AidlMessageQueueSync, AidlMQDescSync>(writerData, readerData,
+                                                                  fuzzBlocking);
     } else {
-        fuzzHidlWithReaders<MessageQueueUnsync, MQDescUnsync>(writerData, readerData);
-        fuzzAidlWithReaders<AidlMessageQueueUnsync, AidlMQDescUnsync>(writerData, readerData);
+        fuzzHidlWithReaders<MessageQueueUnsync, MQDescUnsync>(writerData, readerData, false);
+        fuzzAidlWithReaders<AidlMessageQueueUnsync, AidlMQDescUnsync>(writerData, readerData,
+                                                                      false);
     }
 
     return 0;
