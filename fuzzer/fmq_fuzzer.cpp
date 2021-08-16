@@ -72,7 +72,7 @@ typedef android::hardware::MQDescriptorSync<payload_t> MQDescSync;
 typedef android::hardware::MQDescriptorUnsync<payload_t> MQDescUnsync;
 
 template <typename Queue, typename Desc>
-void reader(const Desc& desc, std::vector<uint8_t> readerData) {
+void reader(const Desc& desc, std::vector<uint8_t> readerData, bool userFd) {
     Queue readMq(desc);
     if (!readMq.isValid()) {
         LOG(ERROR) << "read mq invalid";
@@ -88,11 +88,14 @@ void reader(const Desc& desc, std::vector<uint8_t> readerData) {
         const auto& region = tx.getFirstRegion();
         payload_t* firstStart = region.getAddress();
 
-        // TODO add the debug function to get pointer to the ring buffer
-        uint64_t* writeCounter = reinterpret_cast<uint64_t*>(
-                reinterpret_cast<uint8_t*>(firstStart) - kWriteCounterOffsetBytes);
-        *writeCounter = fdp.ConsumeIntegral<uint64_t>();
-
+        // the ring buffer is only next to the read/write counters when there is
+        // no user supplied fd
+        if (!userFd) {
+            // TODO add the debug function to get pointer to the ring buffer
+            uint64_t* writeCounter = reinterpret_cast<uint64_t*>(
+                    reinterpret_cast<uint8_t*>(firstStart) - kWriteCounterOffsetBytes);
+            *writeCounter = fdp.ConsumeIntegral<uint64_t>();
+        }
         (void)std::to_string(*firstStart);
 
         readMq.commitRead(numElements);
@@ -126,7 +129,7 @@ template <>
 void readerBlocking<MessageQueueUnsync, MQDescUnsync>(const MQDescUnsync&, std::vector<uint8_t>) {}
 
 template <typename Queue>
-void writer(Queue& writeMq, FuzzedDataProvider& fdp) {
+void writer(Queue& writeMq, FuzzedDataProvider& fdp, bool userFd) {
     while (fdp.remaining_bytes()) {
         typename Queue::MemTransaction tx;
         size_t numElements = 1;
@@ -138,12 +141,14 @@ void writer(Queue& writeMq, FuzzedDataProvider& fdp) {
 
         const auto& region = tx.getFirstRegion();
         payload_t* firstStart = region.getAddress();
-
-        // TODO add the debug function to get pointer to the ring buffer
-        uint64_t* readCounter = reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(firstStart) -
-                                                            kReadCounterOffsetBytes);
-        *readCounter = fdp.ConsumeIntegral<uint64_t>();
-
+        // the ring buffer is only next to the read/write counters when there is
+        // no user supplied fd
+        if (!userFd) {
+            // TODO add the debug function to get pointer to the ring buffer
+            uint64_t* readCounter = reinterpret_cast<uint64_t*>(
+                    reinterpret_cast<uint8_t*>(firstStart) - kReadCounterOffsetBytes);
+            *readCounter = fdp.ConsumeIntegral<uint64_t>();
+        }
         *firstStart = fdp.ConsumeIntegral<payload_t>();
 
         writeMq.commitWrite(numElements);
@@ -173,7 +178,16 @@ void fuzzAidlWithReaders(std::vector<uint8_t>& writerData,
                          std::vector<std::vector<uint8_t>>& readerData, bool blocking) {
     FuzzedDataProvider fdp(&writerData[0], writerData.size());
     bool evFlag = blocking || fdp.ConsumeBool();
-    Queue writeMq(fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements), evFlag);
+    android::base::unique_fd dataFd;
+    size_t bufferSize = 0;
+    size_t numElements = fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements);
+    bool userFd = fdp.ConsumeBool();
+    if (userFd) {
+        // run test with our own data region
+        bufferSize = numElements * sizeof(payload_t);
+        dataFd.reset(::ashmem_create_region("SyncReadWrite", bufferSize));
+    }
+    Queue writeMq(numElements, evFlag, std::move(dataFd), bufferSize);
     if (!writeMq.isValid()) {
         LOG(ERROR) << "AIDL write mq invalid";
         return;
@@ -187,14 +201,15 @@ void fuzzAidlWithReaders(std::vector<uint8_t>& writerData,
             clients.emplace_back(readerBlocking<Queue, Desc>, std::ref(desc),
                                  std::ref(readerData[i]));
         } else {
-            clients.emplace_back(reader<Queue, Desc>, std::ref(desc), std::ref(readerData[i]));
+            clients.emplace_back(reader<Queue, Desc>, std::ref(desc), std::ref(readerData[i]),
+                                 userFd);
         }
     }
 
     if (blocking) {
         writerBlocking<Queue>(writeMq, fdp);
     } else {
-        writer<Queue>(writeMq, fdp);
+        writer<Queue>(writeMq, fdp, userFd);
     }
 
     for (auto& client : clients) {
@@ -207,7 +222,16 @@ void fuzzHidlWithReaders(std::vector<uint8_t>& writerData,
                          std::vector<std::vector<uint8_t>>& readerData, bool blocking) {
     FuzzedDataProvider fdp(&writerData[0], writerData.size());
     bool evFlag = blocking || fdp.ConsumeBool();
-    Queue writeMq(fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements), evFlag);
+    android::base::unique_fd dataFd;
+    size_t bufferSize = 0;
+    size_t numElements = fdp.ConsumeIntegralInRange<size_t>(1, kMaxNumElements);
+    bool userFd = fdp.ConsumeBool();
+    if (userFd) {
+        // run test with our own data region
+        bufferSize = numElements * sizeof(payload_t);
+        dataFd.reset(::ashmem_create_region("SyncReadWrite", bufferSize));
+    }
+    Queue writeMq(numElements, evFlag, std::move(dataFd), bufferSize);
     if (!writeMq.isValid()) {
         LOG(ERROR) << "HIDL write mq invalid";
         return;
@@ -221,14 +245,15 @@ void fuzzHidlWithReaders(std::vector<uint8_t>& writerData,
             clients.emplace_back(readerBlocking<Queue, Desc>, std::ref(*desc),
                                  std::ref(readerData[i]));
         } else {
-            clients.emplace_back(reader<Queue, Desc>, std::ref(*desc), std::ref(readerData[i]));
+            clients.emplace_back(reader<Queue, Desc>, std::ref(*desc), std::ref(readerData[i]),
+                                 userFd);
         }
     }
 
     if (blocking) {
         writerBlocking<Queue>(writeMq, fdp);
     } else {
-        writer<Queue>(writeMq, fdp);
+        writer<Queue>(writeMq, fdp, userFd);
     }
 
     for (auto& client : clients) {
