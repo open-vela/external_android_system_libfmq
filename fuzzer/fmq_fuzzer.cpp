@@ -71,10 +71,6 @@ typedef aidl::android::hardware::common::fmq::MQDescriptor<payload_t, Unsynchron
 typedef android::hardware::MQDescriptorSync<payload_t> MQDescSync;
 typedef android::hardware::MQDescriptorUnsync<payload_t> MQDescUnsync;
 
-static inline uint64_t* getCounterPtr(payload_t* start, int byteOffset) {
-    return reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(start) - byteOffset);
-}
-
 template <typename Queue, typename Desc>
 void reader(const Desc& desc, std::vector<uint8_t> readerData, bool userFd) {
     Queue readMq(desc);
@@ -83,7 +79,6 @@ void reader(const Desc& desc, std::vector<uint8_t> readerData, bool userFd) {
         return;
     }
     FuzzedDataProvider fdp(&readerData[0], readerData.size());
-    payload_t* ring = nullptr;
     while (fdp.remaining_bytes()) {
         typename Queue::MemTransaction tx;
         size_t numElements = fdp.ConsumeIntegralInRange<size_t>(0, kMaxNumElements);
@@ -96,10 +91,9 @@ void reader(const Desc& desc, std::vector<uint8_t> readerData, bool userFd) {
         // the ring buffer is only next to the read/write counters when there is
         // no user supplied fd
         if (!userFd) {
-            if (ring == nullptr) {
-                ring = firstStart;
-            }
-            uint64_t* writeCounter = getCounterPtr(ring, kWriteCounterOffsetBytes);
+            // TODO add the debug function to get pointer to the ring buffer
+            uint64_t* writeCounter = reinterpret_cast<uint64_t*>(
+                    reinterpret_cast<uint8_t*>(firstStart) - kWriteCounterOffsetBytes);
             *writeCounter = fdp.ConsumeIntegral<uint64_t>();
         }
         (void)std::to_string(*firstStart);
@@ -136,7 +130,6 @@ void readerBlocking<MessageQueueUnsync, MQDescUnsync>(const MQDescUnsync&, std::
 
 template <typename Queue>
 void writer(Queue& writeMq, FuzzedDataProvider& fdp, bool userFd) {
-    payload_t* ring = nullptr;
     while (fdp.remaining_bytes()) {
         typename Queue::MemTransaction tx;
         size_t numElements = 1;
@@ -151,10 +144,9 @@ void writer(Queue& writeMq, FuzzedDataProvider& fdp, bool userFd) {
         // the ring buffer is only next to the read/write counters when there is
         // no user supplied fd
         if (!userFd) {
-            if (ring == nullptr) {
-                ring = firstStart;
-            }
-            uint64_t* readCounter = getCounterPtr(ring, kReadCounterOffsetBytes);
+            // TODO add the debug function to get pointer to the ring buffer
+            uint64_t* readCounter = reinterpret_cast<uint64_t*>(
+                    reinterpret_cast<uint8_t*>(firstStart) - kReadCounterOffsetBytes);
             *readCounter = fdp.ConsumeIntegral<uint64_t>();
         }
         *firstStart = fdp.ConsumeIntegral<payload_t>();
