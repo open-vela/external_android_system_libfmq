@@ -286,8 +286,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     for (int i = 0; i < numReaders; i++) {
         readerData.emplace_back(fdp.ConsumeBytes<uint8_t>(kMaxDataPerReader));
     }
-    std::vector<uint8_t> writerData = fdp.ConsumeRemainingBytes<uint8_t>();
     bool fuzzBlocking = fdp.ConsumeBool();
+    std::vector<uint8_t> writerData = fdp.ConsumeRemainingBytes<uint8_t>();
     if (fuzzSync) {
         fuzzHidlWithReaders<MessageQueueSync, MQDescSync>(writerData, readerData, fuzzBlocking);
         fuzzAidlWithReaders<AidlMessageQueueSync, AidlMQDescSync>(writerData, readerData,
