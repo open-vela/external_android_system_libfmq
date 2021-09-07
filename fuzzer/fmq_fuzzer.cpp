@@ -124,7 +124,7 @@ void readerBlocking(const Desc& desc, std::vector<uint8_t> readerData) {
                                ? fdp.ConsumeIntegralInRange<size_t>(1, readMq.getQuantumCount())
                                : 1;
         std::vector<payload_t> data;
-        data.reserve(count);
+        data.resize(count);
         success = readMq.readBlocking(data.data(), count, kBlockingTimeoutNs);
     } while (success == true || fdp.remaining_bytes() > sizeof(size_t));
 }
