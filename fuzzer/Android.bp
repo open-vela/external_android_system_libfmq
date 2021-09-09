@@ -56,6 +56,7 @@ cc_fuzz {
     sanitize: {
         scs: true,
         cfi: true,
+        address: true,
         memtag_heap: true,
         // undefined behavior is expected
         all_undefined: false,
