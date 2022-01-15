@@ -19,13 +19,15 @@ package {
 cc_fuzz {
     name: "fmq_fuzzer",
 
-    defaults: [
-        "libbinder_ndk_host_user",
-    ],
-
     srcs: [
         "fmq_fuzzer.cpp",
     ],
+
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 
     static_libs: [
         "libfmq",
