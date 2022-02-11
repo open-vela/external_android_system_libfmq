@@ -30,7 +30,9 @@ cc_library {
     ],
     apex_available: [
         "//apex_available:platform",
+        "com.android.media.swcodec",
         "com.android.neuralnetworks",
+        "test_com.android.media.swcodec",
         "test_com.android.neuralnetworks",
     ],
     export_include_dirs: ["include"],
