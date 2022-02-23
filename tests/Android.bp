@@ -35,6 +35,7 @@ python_test_host {
 
 cc_test {
     name: "fmq_test_client",
+    tidy_timeout_srcs: ["msgq_test_client.cpp"],
     srcs: ["msgq_test_client.cpp"],
 
     cflags: [
@@ -84,6 +85,7 @@ cc_test {
 cc_test {
     name: "fmq_unit_tests",
 
+    tidy_timeout_srcs: ["fmq_unit_tests.cpp"],
     srcs: ["fmq_unit_tests.cpp"],
     shared_libs: [
         "libbase",
