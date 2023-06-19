@@ -15,5 +15,5 @@
 #
 
 ifneq ($(CONFIG_ANDROID_LIBFMQ),)
-CXXFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(APPDIR)/external/android/system/libfmq/base}
+CXXFLAGS += ${INCDIR_PREFIX}$(APPDIR)/external/android/system/libfmq/base
 endif
